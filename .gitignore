@@ -4,6 +4,13 @@ handoffs/
 CLAUDE.md
 HANDOFF.md
 
+# Swift and Xcode build products
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserdatad
+
 # MacOS
 .DS_Store
 .AppleDouble
