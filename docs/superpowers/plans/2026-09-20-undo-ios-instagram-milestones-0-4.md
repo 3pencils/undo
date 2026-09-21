@@ -1471,7 +1471,7 @@ extension WebCoordinator: WKNavigationDelegate {
         // traffic to the platform it embeds.
         guard platform.hosts(url) else {
             if navigationAction.navigationType == .linkActivated {
-                UIApplication.shared.open(url)
+                await UIApplication.shared.open(url)
             }
             return .cancel
         }
