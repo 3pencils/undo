@@ -53,6 +53,27 @@ final class WebCoordinator: NSObject {
             assertionFailure("engine/\(platform.engineDirectory)/hide.css is missing")
         }
 
+        // The filter's selectors and phrases, handed over as a global. Round-tripping
+        // through FeedRules means only known keys reach the page.
+        if let data = EngineBundle.data("\(platform.engineDirectory)/feed.json"),
+           let literal = try? EngineConfig.feedRulesJSONLiteral(data) {
+            scripts.append(
+                WKUserScript(
+                    source: "window.UndoConfig = \(literal);",
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        } else {
+            assertionFailure("engine/\(platform.engineDirectory)/feed.json is missing or malformed")
+        }
+
+        if let filter = EngineBundle.string("\(platform.engineDirectory)/filter.js") {
+            scripts.append(
+                WKUserScript(source: filter, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            )
+        }
+
         return scripts
     }
 
