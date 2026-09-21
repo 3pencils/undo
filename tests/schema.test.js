@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function readText(relativePath) {
-  return readFileSync(fileURLToPath(new URL('../' + relativePath, import.meta.url)), 'utf8');
+  return readFileSync(fileURLToPath(new URL('../engine/' + relativePath, import.meta.url)), 'utf8');
 }
 
 function readJSON(relativePath) {

@@ -97,9 +97,9 @@ The owner's iPhone (`iPhone15,4`) is already known to `devicectl` but shows `una
 | `engine/instagram/hide.css` | Layer 2: the stylesheet injected before the page paints. |
 | `engine/instagram/feed.json` | Layer 3 data: which feed items to hide. |
 | `engine/instagram/filter.js` | Layer 3 logic: pure predicates plus a thin DOM pass. Classic script, injected at document end. |
-| `engine/test/harness.js` | Loads a classic script into a `node:vm` sandbox; builds fake documents for tests. |
-| `engine/test/schema.test.js` | Validates the three JSON files. |
-| `engine/test/filter.test.js` | Tests `filter.js` predicates and DOM pass. |
+| `tests/harness.js` | Loads a classic script into a `node:vm` sandbox; builds fake documents for tests. Never ships. |
+| `tests/schema.test.js` | Validates the three JSON files. |
+| `tests/filter.test.js` | Tests `filter.js` predicates and DOM pass. |
 | `ios/UndoKit/Sources/UndoKit/PathPolicy.swift` | Pure: is this path blocked? |
 | `ios/UndoKit/Sources/UndoKit/InjectionPolicy.swift` | Pure: may the filter script be injected on this URL? |
 | `ios/UndoKit/Sources/UndoKit/EngineConfig.swift` | Pure: decode the engine JSON into Swift values. |
@@ -135,7 +135,7 @@ Milestone 0. Creates the repo skeleton and the three data files every later task
 - Create: `.github/workflows/ci.yml`
 - Create: `SECURITY.md`
 - Modify: `README.md` (replace both lines)
-- Test: `engine/test/schema.test.js`
+- Test: `tests/schema.test.js`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -143,7 +143,7 @@ Milestone 0. Creates the repo skeleton and the three data files every later task
 
 - [ ] **Step 1: Write the failing schema test**
 
-Create `engine/test/schema.test.js`:
+Create `tests/schema.test.js`:
 
 ```js
 import { test } from 'node:test';
@@ -152,7 +152,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 function readText(relativePath) {
-  return readFileSync(fileURLToPath(new URL('../' + relativePath, import.meta.url)), 'utf8');
+  return readFileSync(fileURLToPath(new URL('../engine/' + relativePath, import.meta.url)), 'utf8');
 }
 
 function readJSON(relativePath) {
@@ -220,7 +220,7 @@ test('feed.json lists the feed heuristics', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: FAIL with `ENOENT` — the JSON files do not exist yet.
 
 - [ ] **Step 3: Create the three data files**
@@ -275,10 +275,10 @@ a[href^="instagram:"] {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: PASS, 5 tests.
 
-Note the quoting: `node --test engine/test/` fails on Node 25 with `MODULE_NOT_FOUND`. The quoted glob is the form that works, and it is the form CI uses.
+Note the quoting: `node --test tests/` fails on Node 25 with `MODULE_NOT_FOUND`. The quoted glob is the form that works, and it is the form CI uses.
 
 - [ ] **Step 5: Create the injection marker**
 
@@ -317,7 +317,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test 'engine/**/*.test.js'
+      - run: node --test 'tests/**/*.test.js'
 
   kit:
     name: UndoKit (Swift)
@@ -382,7 +382,7 @@ Requires Xcode 26 or newer and an iOS platform install
 (`xcodebuild -downloadPlatform iOS`).
 
 ```bash
-node --test 'engine/**/*.test.js'     # filter rules and logic
+node --test 'tests/**/*.test.js'     # filter rules and logic
 swift test --package-path ios/UndoKit  # policy logic
 open ios/Undo.xcodeproj                # then run on your iPhone
 ```
@@ -443,7 +443,7 @@ give us a chance to ship a fix before publishing.
 
 - [ ] **Step 9: Run the whole test suite**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: PASS, 4 tests, 0 failures.
 
 - [ ] **Step 10: Propose the commit, then wait**
@@ -995,6 +995,7 @@ The project file is written by hand. There is no `xcodegen` or `tuist` here and 
 		0A1B2C3D000000000000000C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1010,6 +1011,7 @@ The project file is written by hand. There is no `xcodegen` or `tuist` here and 
 		0A1B2C3D000000000000000D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1357,7 +1359,7 @@ xcodebuild build -project ios/Undo.xcodeproj -scheme Undo \
 find /tmp/undo-dd/Build/Products -name '*.app' -maxdepth 3 -exec ls -R {}/engine \;
 ```
 
-Expected: `marker.js` and an `instagram` folder holding `feed.json`, `hide.css` and `paths.json`.
+Expected: exactly `marker.js` and an `instagram` folder holding `feed.json`, `filter.js`, `hide.css` and `paths.json` — and nothing else. `engine/` ships verbatim as a folder reference, so anything put inside it lands in the installed app; that is why the tests live in `tests/` at the repo root instead.
 
 - [ ] **Step 11: Run it on the iPhone and verify the login persists**
 
@@ -1683,7 +1685,7 @@ Expected: `** BUILD SUCCEEDED **`.
 3. Expected: no "open in app" banner at the top or bottom of the page.
 4. For anything still visible, open Safari's Web Inspector (Develop > [iPhone] > the Instagram page), select the element, and read its `href` and `aria-label`.
 5. Add a selector to `engine/instagram/hide.css` matching that `href` or `aria-label`. Class names change every few weeks, so they are not an option, and a test fails if one is used.
-6. Re-run `node --test 'engine/**/*.test.js'` and `swift test --package-path ios/UndoKit` after each edit. Both read the real file, so a typo fails on the Mac.
+6. Re-run `node --test 'tests/**/*.test.js'` and `swift test --package-path ios/UndoKit` after each edit. Both read the real file, so a typo fails on the Mac.
 7. Confirm the login page still works: sign out, sign in with two-factor. Expected: no hidden field, no broken button.
 
 - [ ] **Step 8: Propose the commit, then wait**
@@ -1705,8 +1707,8 @@ The script splits in two: pure predicates that the Node tests cover completely, 
 
 **Files:**
 - Create: `engine/instagram/filter.js`
-- Create: `engine/test/harness.js`
-- Test: `engine/test/filter.test.js`
+- Create: `tests/harness.js`
+- Test: `tests/filter.test.js`
 - Modify: `ios/Undo/WebCoordinator.swift` (`loadUserScripts(for:)` only)
 
 **Interfaces:**
@@ -1718,14 +1720,14 @@ The script splits in two: pure predicates that the Node tests cover completely, 
   - `shouldHideArticle(descriptor, config) -> boolean`
   - `filterFeed(doc, config) -> number` (how many it hid)
   - `start(doc, config) -> {run, schedule, observer}`
-- Produces, from `engine/test/harness.js`:
+- Produces, from `tests/harness.js`:
   - `loadEngineScript(relativePath, globalName)`
   - `readEngineJSON(relativePath)`
   - `fakeDocument({path, articles}) -> document stub`
 
 - [ ] **Step 1: Write the test harness**
 
-`engine/test/harness.js`:
+`tests/harness.js`:
 
 ```js
 import { readFileSync } from 'node:fs';
@@ -1733,7 +1735,7 @@ import { createContext, runInContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 function enginePath(relativePath) {
-  return fileURLToPath(new URL('../' + relativePath, import.meta.url));
+  return fileURLToPath(new URL('../engine/' + relativePath, import.meta.url));
 }
 
 /* Runs a shipped script in a sandbox and hands back the namespace it defines.
@@ -1794,7 +1796,7 @@ export function fakeDocument({ path = '/', articles = [] } = {}) {
 
 - [ ] **Step 2: Write the failing filter tests**
 
-`engine/test/filter.test.js`:
+`tests/filter.test.js`:
 
 ```js
 import { test } from 'node:test';
@@ -1874,7 +1876,7 @@ test('filterFeed shows an article again when a recycled node stops matching', ()
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: FAIL with `ENOENT` for `instagram/filter.js`.
 
 - [ ] **Step 4: Write filter.js**
@@ -1886,7 +1888,7 @@ Expected: FAIL with `ENOENT` for `instagram/filter.js`.
 
    Injected at document end on every page whose path is outside /accounts/.
    Everything above `start` is a pure function with no DOM in it, and those are
-   what the tests in engine/test cover. The DOM pass is kept thin on purpose.
+   what the tests in tests/ cover. The DOM pass is kept thin on purpose.
 
    Selectors and phrases arrive in window.UndoConfig, which the app fills from
    engine/instagram/feed.json before this file runs. */
@@ -2009,7 +2011,7 @@ Two choices worth keeping: the script reads `textContent` rather than `innerText
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: PASS, 13 tests (5 from Task 1, 8 here).
 
 - [ ] **Step 6: Inject the config and the filter**
@@ -2081,7 +2083,7 @@ Expected: `** BUILD SUCCEEDED **`.
 3. Expected: scrolling stays smooth, and posts do not flicker in and out.
 4. For anything that slips through, open Safari's Web Inspector, select the post's `article` element, and read `element.textContent` and the `href`s inside it. Add the phrase or prefix to `engine/instagram/feed.json`.
 5. For a post that disappears and should not have, run `window.UndoInstagram.describeArticle(element)` in the console against it to see which rule caught it.
-6. Re-run `node --test 'engine/**/*.test.js'` and `swift test --package-path ios/UndoKit` after each edit to `feed.json`.
+6. Re-run `node --test 'tests/**/*.test.js'` and `swift test --package-path ios/UndoKit` after each edit to `feed.json`.
 7. Check DMs: open a thread where someone sent a reel. Expected: the thread and the reel link are untouched.
 
 - [ ] **Step 9: Propose the commit, then wait**
@@ -2101,7 +2103,7 @@ Milestone 4, second half. A reel someone sends you opens and plays. The next one
 
 **Files:**
 - Modify: `engine/instagram/filter.js` (add three functions, add one line to `run`)
-- Modify: `engine/test/filter.test.js` (add four tests)
+- Modify: `tests/filter.test.js` (add four tests)
 
 **Interfaces:**
 - Consumes: `normalizePath` from Task 6.
@@ -2109,7 +2111,7 @@ Milestone 4, second half. A reel someone sends you opens and plays. The next one
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `engine/test/filter.test.js`:
+Append to `tests/filter.test.js`:
 
 ```js
 test('singleReelId reads the id out of a reel path', () => {
@@ -2146,7 +2148,7 @@ test('applyReelLock removes the lock when the page changes', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: FAIL with `filter.singleReelId is not a function`.
 
 - [ ] **Step 3: Add singleReelId**
@@ -2206,7 +2208,7 @@ In `api.start`, add the lock call to `run`:
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `node --test 'engine/**/*.test.js'`
+Run: `node --test 'tests/**/*.test.js'`
 Expected: PASS, 17 tests.
 
 - [ ] **Step 7: Build**
@@ -2235,7 +2237,7 @@ Expected: `** BUILD SUCCEEDED **`.
 Run:
 
 ```bash
-node --test 'engine/**/*.test.js'
+node --test 'tests/**/*.test.js'
 swift test --package-path ios/UndoKit
 xcodebuild build -project ios/Undo.xcodeproj -scheme Undo \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO

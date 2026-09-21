@@ -3,7 +3,7 @@ import { createContext, runInContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 function enginePath(relativePath) {
-  return fileURLToPath(new URL('../' + relativePath, import.meta.url));
+  return fileURLToPath(new URL('../engine/' + relativePath, import.meta.url));
 }
 
 /* Runs a shipped script in a sandbox and hands back the namespace it defines.

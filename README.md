@@ -34,7 +34,7 @@ Requires Xcode 26 or newer and an iOS platform install
 (`xcodebuild -downloadPlatform iOS`).
 
 ```bash
-node --test 'engine/**/*.test.js'     # filter rules and logic
+node --test 'tests/**/*.test.js'     # filter rules and logic
 swift test --package-path ios/UndoKit  # policy logic
 open ios/Undo.xcodeproj                # then run on your iPhone
 ```
