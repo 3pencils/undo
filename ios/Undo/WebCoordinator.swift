@@ -35,10 +35,25 @@ final class WebCoordinator: NSObject {
     }
 
     private static func loadUserScripts(for platform: Platform) -> [WKUserScript] {
-        guard let marker = EngineBundle.string("marker.js") else { return [] }
-        return [
-            WKUserScript(source: marker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-        ]
+        var scripts: [WKUserScript] = []
+
+        if let marker = EngineBundle.string("marker.js") {
+            scripts.append(
+                WKUserScript(source: marker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+        }
+
+        // At document start, so the elements it hides are never painted.
+        if let css = EngineBundle.string("\(platform.engineDirectory)/hide.css"),
+           let source = try? ScriptBuilder.styleInjector(css: css, id: "undo-static-hides") {
+            scripts.append(
+                WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+        } else {
+            assertionFailure("engine/\(platform.engineDirectory)/hide.css is missing")
+        }
+
+        return scripts
     }
 
     /// Installs Undo's scripts for pages outside `/accounts/`, and removes them
