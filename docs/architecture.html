@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>How Undo Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:   #F5F6F9;
+    --surface:  #FFFFFF;
+    --sunk:     #EDEFF4;
+    --ink:      #14171D;
+    --muted:    #5A6272;
+    --line:     #DCE1EA;
+    --accent:   #2A4BD4;
+    --block:    #B0372A;
+    --pass:     #1B7449;
+    --guard:    #9C6406;
+
+    --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+    --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --wide: 940px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #0E1015;
+      --surface: #161A21;
+      --sunk:    #1C212A;
+      --ink:     #E7EAF0;
+      --muted:   #959DAD;
+      --line:    #262C38;
+      --accent:  #8CA0FF;
+      --block:   #F08A7A;
+      --pass:    #56CC90;
+      --guard:   #E0AC55;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:  #0E1015;
+    --surface: #161A21;
+    --sunk:    #1C212A;
+    --ink:     #E7EAF0;
+    --muted:   #959DAD;
+    --line:    #262C38;
+    --accent:  #8CA0FF;
+    --block:   #F08A7A;
+    --pass:    #56CC90;
+    --guard:   #E0AC55;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 0;
+  }
+
+  .measure { max-width: var(--measure); }
+
+  /* ---- masthead ---- */
+
+  header.mast {
+    border-bottom: 1px solid var(--line);
+    padding-block: 56px 40px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(38px, 7vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: clamp(17px, 2.2vw, 20px);
+    line-height: 1.55;
+    color: var(--muted);
+    margin: 0;
+    max-width: 60ch;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections ---- */
+
+  section { padding-block: 52px; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(25px, 3.6vw, 34px);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  p { margin: 0 0 18px; }
+  p:last-child { margin-bottom: 0; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--sunk);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  .lede { font-size: 17.5px; }
+
+  /* ---- figures ---- */
+
+  figure {
+    margin: 32px 0 0;
+    max-width: var(--wide);
+  }
+  .figbox {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 18px;
+    overflow-x: auto;
+  }
+  figure svg { width: 100%; height: auto; max-width: 100%; display: block; }
+  figcaption {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--muted);
+    margin-top: 12px;
+    max-width: 62ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* svg paint classes, driven by the same tokens as the page */
+  .s-line   { stroke: var(--line); }
+  .s-edge   { stroke: var(--muted); }
+  .s-ink    { fill: var(--ink); }
+  .s-muted  { fill: var(--muted); }
+  .s-accent { fill: var(--accent); }
+  .s-block  { fill: var(--block); }
+  .s-pass   { fill: var(--pass); }
+  .s-guard  { fill: var(--guard); }
+  .e-block  { stroke: var(--block); }
+  .e-pass   { stroke: var(--pass); }
+  .e-guard  { stroke: var(--guard); }
+  .e-accent { stroke: var(--accent); }
+  .surface  { fill: var(--surface); }
+  .sunk     { fill: var(--sunk); }
+  .t-mono   { font-family: var(--mono); }
+  .t-body   { font-family: var(--body); }
+  .t-disp   { font-family: var(--display); font-weight: 700; }
+
+  /* ---- absence list ---- */
+
+  .absence {
+    list-style: none;
+    padding: 0;
+    margin: 22px 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .absence li {
+    background: var(--surface);
+    padding: 13px 15px;
+    font-size: 14.5px;
+    line-height: 1.4;
+  }
+  .absence li span {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  /* ---- layer cards ---- */
+
+  .layers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .layer {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .layer .num {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .layer p { font-size: 14.5px; margin: 0; }
+  .layer dl { margin: 4px 0 0; font-size: 13.5px; }
+  .layer dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .layer dd { margin: 2px 0 0; line-height: 1.45; }
+  .layer.l1 { border-top: 3px solid var(--pass); }
+  .layer.l2 { border-top: 3px solid var(--accent); }
+  .layer.l3 { border-top: 3px solid var(--block); }
+
+  /* ---- split / trees ---- */
+
+  .split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 16px;
+    margin-top: 30px;
+  }
+  .tree {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .tree h3 { margin-bottom: 4px; }
+  .tree .role { font-size: 13.5px; color: var(--muted); margin: 0 0 14px; }
+  .tree pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    margin: 0;
+    color: var(--ink);
+    overflow-x: auto;
+  }
+  .tree pre em { font-style: normal; color: var(--muted); }
+
+  /* ---- table ---- */
+
+  .tablewrap { overflow-x: auto; margin-top: 28px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    min-width: 520px;
+  }
+  caption {
+    text-align: left;
+    font-size: 13.5px;
+    color: var(--muted);
+    padding-bottom: 12px;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 14px 12px 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    line-height: 1.45;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 400;
+    border-bottom-color: var(--muted);
+  }
+  td:first-child { font-weight: 600; white-space: nowrap; padding-right: 22px; }
+  .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 7px;
+    vertical-align: 1px;
+  }
+  .dot.pass { background: var(--pass); }
+  .dot.accent { background: var(--accent); }
+  .dot.block { background: var(--block); }
+
+  /* ---- decisions ---- */
+
+  .decisions { margin-top: 28px; display: grid; gap: 14px; }
+  .decision {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--guard);
+    border-radius: 8px;
+    padding: 18px 20px;
+  }
+  .decision h3 { margin-bottom: 6px; }
+  .decision p { font-size: 14.5px; margin: 0 0 10px; }
+  .decision p:last-child { margin-bottom: 0; }
+  .verdict {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .verdict b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    padding-block: 40px 60px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  footer code { font-size: 12.5px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color 120ms ease; }
+  }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+</style>
+
+</head>
+<body>
+<header class="mast">
+  <div class="wrap">
+    <p class="eyebrow">Undo · iOS · architecture</p>
+    <h1>A browser with one bookmark and three filters</h1>
+    <p class="standfirst">Undo is not an Instagram client. It is Instagram's own mobile website, running inside an app that <strong>refuses to load some pages</strong> and <strong>hides some elements</strong> on the rest. Everything else on this page follows from that.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap measure">
+    <p class="kicker">The one idea</p>
+    <h2>We build the subtraction, not the app</h2>
+    <p class="lede">Inside Undo there is a <code>WKWebView</code> — a complete browser engine with none of the browser's own interface around it. It loads <code>instagram.com</code>, signs in as you, and renders Instagram's real HTML.</p>
+    <p>That single decision is why this is achievable at all. There is no private API, no scraping, no reverse engineering, no account of ours between you and Meta. It is also how every app in this category works, Feather and ScrollGuard included.</p>
+    <p>So the list of things we never write is long, and each item is a thing that cannot break:</p>
+    <ul class="absence">
+      <li><span>Instagram gives us</span>Login, including two-factor</li>
+      <li><span>Instagram gives us</span>The feed and stories</li>
+      <li><span>Instagram gives us</span>DMs</li>
+      <li><span>Instagram gives us</span>Search and profiles</li>
+      <li><span>Instagram gives us</span>Photo posting</li>
+      <li><span>Instagram gives us</span>Video playback</li>
+    </ul>
+    <p style="margin-top:22px">What we write is the filter. It is a few hundred lines, and it is the entire product.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="measure">
+      <p class="kicker">The mechanism</p>
+      <h2>Three filters, cheapest first</h2>
+      <p class="lede">Every page load falls through three layers in order. Each one is a different trade between how much it can catch and how easily Instagram can break it.</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 760 590" role="img" aria-label="A tap falls through three filter layers. Layer one, the navigation policy, cancels the reels feed and explore before anything loads and allows a single reel. Layer two, the content rule list, hides the Reels tab and install banners before the page paints. Layer three, the injected script, hides inline reels, suggested posts and sponsored posts as the feed loads. What remains is what you see.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- fragility rail -->
+          <line x1="26" y1="86" x2="26" y2="512" class="s-line" stroke-width="2" stroke-linecap="round"/>
+          <text class="t-mono s-muted" font-size="10.5" letter-spacing="0.08em" transform="rotate(-90 26 300)" x="26" y="300" text-anchor="middle" dy="-9">ROBUST &#8594; FRAGILE</text>
+
+          <!-- start -->
+          <text class="t-mono s-muted" x="190" y="26" font-size="12" text-anchor="middle">you tap something</text>
+          <circle cx="190" cy="44" r="4" class="s-muted"/>
+          <g class="s-edge"><line x1="190" y1="50" x2="190" y2="70" class="s-edge" stroke-width="1.5" marker-end="url(#ah)" style="color:var(--muted)"/></g>
+
+          <!-- layer 1 -->
+          <rect x="70" y="78" width="240" height="78" rx="8" class="surface s-line" stroke="var(--pass)" stroke-width="1.5"/>
+          <text class="t-mono s-pass" x="88" y="102" font-size="11" letter-spacing="0.09em">LAYER 1</text>
+          <text class="t-disp s-ink" x="88" y="123" font-size="16">Navigation policy</text>
+          <text class="t-body s-muted" x="88" y="142" font-size="12">Swift · decides before anything loads</text>
+
+          <line x1="190" y1="156" x2="190" y2="196" class="e-pass" stroke-width="1.5" marker-end="url(#ah)" style="color:var(--pass)"/>
+
+          <!-- layer 2 -->
+          <rect x="70" y="204" width="240" height="78" rx="8" class="surface" stroke="var(--accent)" stroke-width="1.5"/>
+          <text class="t-mono s-accent" x="88" y="228" font-size="11" letter-spacing="0.09em">LAYER 2</text>
+          <text class="t-disp s-ink" x="88" y="249" font-size="16">Static hides</text>
+          <text class="t-body s-muted" x="88" y="268" font-size="12">CSS · applied before the page paints</text>
+
+          <line x1="190" y1="282" x2="190" y2="322" class="e-accent" stroke-width="1.5" marker-end="url(#ah)" style="color:var(--accent)"/>
+
+          <!-- layer 3 -->
+          <rect x="70" y="330" width="240" height="78" rx="8" class="surface" stroke="var(--block)" stroke-width="1.5"/>
+          <text class="t-mono s-block" x="88" y="354" font-size="11" letter-spacing="0.09em">LAYER 3</text>
+          <text class="t-disp s-ink" x="88" y="375" font-size="16">Injected script</text>
+          <text class="t-body s-muted" x="88" y="394" font-size="12">JavaScript · watches the feed load</text>
+
+          <line x1="190" y1="408" x2="190" y2="448" class="e-block" stroke-width="1.5" marker-end="url(#ah)" style="color:var(--block)"/>
+
+          <!-- output -->
+          <rect x="70" y="456" width="240" height="60" rx="8" class="sunk" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="0"/>
+          <text class="t-disp s-ink" x="190" y="484" font-size="16" text-anchor="middle">What you see</text>
+          <text class="t-body s-muted" x="190" y="502" font-size="11.5" text-anchor="middle">people you follow, and nothing else</text>
+
+          <!-- branch: layer 1 -->
+          <line x1="310" y1="117" x2="352" y2="117" class="s-edge" stroke-width="1.5" stroke-dasharray="3 3" style="color:var(--muted)"/>
+          <text class="t-mono s-block" x="362" y="96" font-size="12.5">/reels/</text>
+          <text class="t-body s-muted" x="440" y="96" font-size="12.5">cancelled — the page never loads</text>
+          <text class="t-mono s-block" x="362" y="121" font-size="12.5">/explore/</text>
+          <text class="t-body s-muted" x="440" y="121" font-size="12.5">cancelled — search opens instead</text>
+          <text class="t-mono s-pass" x="362" y="146" font-size="12.5">/reel/&#8230;/</text>
+          <text class="t-body s-muted" x="440" y="146" font-size="12.5">allowed — one reel, locked to itself</text>
+
+          <!-- branch: layer 2 -->
+          <line x1="310" y1="243" x2="352" y2="243" class="s-edge" stroke-width="1.5" stroke-dasharray="3 3" style="color:var(--muted)"/>
+          <text class="t-body s-ink" x="362" y="234" font-size="12.5">The Reels tab in the bottom bar</text>
+          <text class="t-body s-ink" x="362" y="256" font-size="12.5">&#8220;Open in app&#8221; banners</text>
+
+          <!-- branch: layer 3 -->
+          <line x1="310" y1="369" x2="352" y2="369" class="s-edge" stroke-width="1.5" stroke-dasharray="3 3" style="color:var(--muted)"/>
+          <text class="t-body s-ink" x="362" y="348" font-size="12.5">Reels sitting inline in the feed</text>
+          <text class="t-body s-ink" x="362" y="370" font-size="12.5">&#8220;Suggested for you&#8221;</text>
+          <text class="t-body s-ink" x="362" y="392" font-size="12.5">&#8220;Sponsored&#8221;</text>
+
+          <!-- footnote line -->
+          <line x1="362" y1="470" x2="730" y2="470" class="s-line" stroke-width="1"/>
+          <text class="t-body s-muted" x="362" y="494" font-size="12">Layer 1 alone removes the main time sink,</text>
+          <text class="t-body s-muted" x="362" y="512" font-size="12">and it is the layer that almost never breaks.</text>
+        </svg>
+      </div>
+      <figcaption><b>One tap, three chances to stop it.</b> The order is deliberate: the layer that catches the most with the least code runs first, so when Instagram ships a redesign the app degrades a piece at a time instead of failing all at once.</figcaption>
+    </figure>
+
+    <div class="layers">
+      <div class="layer l1">
+        <p class="num">LAYER 1</p>
+        <h3>Navigation policy</h3>
+        <p>About ten lines of Swift. Before any page loads, it compares the URL path against a list and cancels the load outright.</p>
+        <dl>
+          <dt>Reads</dt><dd><code>paths.json</code></dd>
+          <dt>Breaks when</dt><dd>Instagram changes its URLs. They have been stable for years.</dd>
+          <dt>If it breaks</dt><dd>A blocked page opens. Loud and obvious.</dd>
+        </dl>
+      </div>
+      <div class="layer l2">
+        <p class="num">LAYER 2</p>
+        <h3>Static hides</h3>
+        <p>A stylesheet installed before the page body is parsed, so the elements it hides are never painted. Plain CSS — it points at things by <code>href</code> and <code>aria-label</code>, never by class name.</p>
+        <dl>
+          <dt>Reads</dt><dd><code>hide.css</code></dd>
+          <dt>Breaks when</dt><dd>A selector changes. Every few weeks is realistic.</dd>
+          <dt>If it breaks</dt><dd>The Reels button reappears in the bar.</dd>
+        </dl>
+      </div>
+      <div class="layer l3">
+        <p class="num">LAYER 3</p>
+        <h3>Injected script</h3>
+        <p>A small script running inside the page. It watches the feed as posts arrive and hides the ones that should not be there.</p>
+        <dl>
+          <dt>Reads</dt><dd><code>feed.json</code> + <code>filter.js</code></dd>
+          <dt>Breaks when</dt><dd>Instagram redesigns the feed.</dd>
+          <dt>If it breaks</dt><dd>Suggested posts leak back in. This is the layer that needs upkeep.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="measure" style="margin-top:28px">
+      <p>Layers 2 and 3 look redundant — both hide things. They are not interchangeable. Layer 2 can only point at an element by its attributes, which is enough for a button that is always there and never enough for a sponsored post. Layer 3 can read text, but it runs after the element exists, so using it for the nav bar would mean watching the Reels button appear and then vanish on every page load. Different targets, different timing.</p>
+      <p>They do share one delivery mechanism: both are installed into the page as user scripts. That is deliberate. An Android WebView has no equivalent of WebKit's compiled rule lists, so keeping layer 2 as an ordinary stylesheet is what lets the Play Store build reuse the identical file later.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="measure">
+      <p class="kicker">The trust story</p>
+      <h2>Our code is absent from every login page</h2>
+      <p class="lede">An app that embeds a website can read anything typed into it, passwords included. That is the position Feather asks you to trust an anonymous developer with. Undo is built so you can check instead.</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 740 280" role="img" aria-label="Before each page load, Undo checks the URL path. If the path starts with slash accounts, which covers login, two-factor and password reset, no scripts are installed at all. For every other path, the config and the filter script are installed.">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect x="14" y="110" width="168" height="62" rx="8" class="surface" stroke="var(--muted)" stroke-width="1.5"/>
+          <text class="t-disp s-ink" x="98" y="135" font-size="14" text-anchor="middle">A page is about</text>
+          <text class="t-disp s-ink" x="98" y="153" font-size="14" text-anchor="middle">to load</text>
+
+          <line x1="182" y1="141" x2="232" y2="141" class="s-edge" stroke-width="1.5" marker-end="url(#ah2)" style="color:var(--muted)"/>
+
+          <circle cx="252" cy="141" r="15" class="surface" stroke="var(--muted)" stroke-width="1.5"/>
+          <text class="t-mono s-muted" x="252" y="146" font-size="13" text-anchor="middle">?</text>
+          <text class="t-mono s-muted" x="252" y="180" font-size="10.5" text-anchor="middle" letter-spacing="0.06em">CHECK THE PATH</text>
+
+          <!-- upper branch: guarded -->
+          <path d="M 268 132 C 300 132, 300 62, 336 62" fill="none" class="e-guard" stroke-width="1.8" marker-end="url(#ah2)" style="color:var(--guard)"/>
+          <text class="t-mono s-guard" x="300" y="46" font-size="11.5" text-anchor="middle">/accounts/</text>
+
+          <rect x="348" y="24" width="376" height="76" rx="8" class="surface" stroke="var(--guard)" stroke-width="1.8"/>
+          <text class="t-disp s-guard" x="368" y="50" font-size="15">Nothing is injected</text>
+          <text class="t-body s-muted" x="368" y="71" font-size="12.5">Login, two-factor, password reset.</text>
+          <text class="t-body s-muted" x="368" y="89" font-size="12.5">Undo has no code on the page where you type your password.</text>
+
+          <!-- lower branch -->
+          <path d="M 268 150 C 300 150, 300 220, 336 220" fill="none" class="e-accent" stroke-width="1.8" marker-end="url(#ah2)" style="color:var(--accent)"/>
+          <text class="t-mono s-accent" x="300" y="244" font-size="11.5" text-anchor="middle">everything else</text>
+
+          <rect x="348" y="182" width="376" height="76" rx="8" class="surface" stroke="var(--accent)" stroke-width="1.8"/>
+          <text class="t-disp s-accent" x="368" y="208" font-size="15">The filter is installed</text>
+          <text class="t-body s-muted" x="368" y="229" font-size="12.5">The feed, DMs, profiles, a single reel.</text>
+          <text class="t-body s-muted" x="368" y="247" font-size="12.5">Layer 3 runs here and only here.</text>
+        </svg>
+      </div>
+      <figcaption><b>The guard runs before the load begins, not after.</b> Anything that is not an ordinary web page with a path — an unusual scheme, a URL with no path — counts as guarded, so the failure mode is always <em>no injection</em>.</figcaption>
+    </figure>
+
+    <div class="measure" style="margin-top:30px">
+      <h3>Why this is checkable rather than a promise</h3>
+      <p>Three things make the claim testable by a stranger:</p>
+      <p>The decision is a pure function with unit tests that run on every commit in public CI. A three-line marker script sets a flag, so anyone can open Safari's Web Inspector against the running app and confirm our code is present on the feed and absent on <code>/accounts/login/</code>. And the whole filter ships as plain files in the app bundle, so an installed copy can be extracted and diffed against the repo.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="measure">
+      <p class="kicker">How the code is arranged</p>
+      <h2>Rules are data; the app is dumb</h2>
+      <p class="lede">The Swift app holds no filter rules of its own. Every rule is a JSON file or a plain script in <code>engine/</code>, which the shell reads at launch.</p>
+    </div>
+
+    <div class="split">
+      <div class="tree">
+        <h3>engine/</h3>
+        <p class="role">The filter. Plain JavaScript and JSON. No Swift.</p>
+<pre>instagram/
+  paths.json   <em>← layer 1 blocks</em>
+  hide.css     <em>← layer 2 hides</em>
+  feed.json    <em>← layer 3 hides</em>
+  filter.js    <em>← layer 3 logic</em>
+marker.js      <em>← the guard's flag</em></pre>
+      </div>
+      <div class="tree">
+        <h3>ios/</h3>
+        <p class="role">The shell. Swift. Reads the files above.</p>
+<pre>UndoKit/       <em>← pure logic, tested
+                 on the Mac</em>
+Undo/
+  WebTab        <em>← builds the web view</em>
+  WebCoordinator <em>← layer 1 &amp; the guard</em>
+  EngineBundle  <em>← reads engine/</em></pre>
+      </div>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 700 220" role="img" aria-label="One engine folder holds a rule set per platform. The iOS shell reads it today, and the Android shell will read the same files later without changes.">
+          <defs>
+            <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <text class="t-mono s-muted" x="20" y="24" font-size="10.5" letter-spacing="0.09em">ONE RULE SET PER PLATFORM</text>
+
+          <rect x="20" y="36" width="210" height="46" rx="7" class="surface" stroke="var(--accent)" stroke-width="1.5"/>
+          <text class="t-mono s-ink" x="38" y="65" font-size="13">engine/instagram/</text>
+
+          <rect x="20" y="92" width="210" height="46" rx="7" class="sunk" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text class="t-mono s-muted" x="38" y="121" font-size="13">engine/tiktok/</text>
+
+          <rect x="20" y="148" width="210" height="46" rx="7" class="sunk" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text class="t-mono s-muted" x="38" y="177" font-size="13">engine/youtube/</text>
+
+          <line x1="238" y1="115" x2="300" y2="115" class="s-edge" stroke-width="1.5" style="color:var(--muted)"/>
+          <line x1="300" y1="72" x2="300" y2="158" class="s-edge" stroke-width="1.5" style="color:var(--muted)"/>
+
+          <line x1="300" y1="72" x2="396" y2="72" class="e-accent" stroke-width="1.6" marker-end="url(#ah3)" style="color:var(--accent)"/>
+          <line x1="300" y1="158" x2="396" y2="158" class="s-edge" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ah3)" style="color:var(--muted)"/>
+
+          <rect x="404" y="46" width="276" height="54" rx="7" class="surface" stroke="var(--accent)" stroke-width="1.6"/>
+          <text class="t-disp s-ink" x="424" y="70" font-size="14">iOS shell</text>
+          <text class="t-body s-muted" x="424" y="88" font-size="11.5">Swift · reads the JSON and the script</text>
+
+          <rect x="404" y="132" width="276" height="54" rx="7" class="sunk" stroke="var(--line)" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <text class="t-disp s-muted" x="424" y="156" font-size="14">Android shell</text>
+          <text class="t-body s-muted" x="424" y="174" font-size="11.5">later · reads the same files, unchanged</text>
+
+          <text class="t-mono s-muted" x="318" y="118" font-size="10.5">same files</text>
+        </svg>
+      </div>
+      <figcaption><b>The split is what makes the second platform cheap.</b> Adding TikTok is a new folder under <code>engine/</code>; adding Android is a new shell that reads the folders that already exist.</figcaption>
+    </figure>
+
+    <div class="measure" style="margin-top:28px">
+      <p>Three things fall out of this. Changing a rule is a one-line edit to a JSON file, not a code change. The Android shell later reuses <code>engine/</code> untouched. And because those files ship into the app bundle exactly as they appear in the repo, the promise "here is everything Undo does to the page" is something a stranger can verify with a diff.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="measure">
+      <p class="kicker">Living with it</p>
+      <h2>What breaks, and what it costs</h2>
+      <p class="lede">Instagram will change. The design's job is to make sure that when it does, the failure is small, obvious and cheap to fix.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Failure modes by layer, worst case first for the reader who has to maintain this.</caption>
+        <thead>
+          <tr><th>Layer</th><th>Breaks when</th><th>You notice</th><th>The fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="dot pass"></span>Navigation</td>
+            <td>Instagram moves a URL</td>
+            <td>A blocked page opens</td>
+            <td>One line in <code>paths.json</code></td>
+          </tr>
+          <tr>
+            <td><span class="dot accent"></span>Content rules</td>
+            <td>A selector changes</td>
+            <td>The Reels button is back</td>
+            <td>One line in <code>hide.css</code></td>
+          </tr>
+          <tr>
+            <td><span class="dot block"></span>Script</td>
+            <td>The feed is redesigned</td>
+            <td>Suggested posts leak in</td>
+            <td>A phrase or selector in <code>feed.json</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="measure" style="margin-top:26px">
+      <p>None of those fixes touch Swift, and none need a rebuild of anything but the app bundle. Both test suites read the real rule files, so a typo fails on the Mac in about a second rather than on the phone in silence.</p>
+      <p>One honest limitation: the phrases the script matches — <code>Sponsored</code>, <code>Suggested for you</code> — are English. An Instagram account set to another language hides less until that language's phrases are added to <code>feed.json</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="measure">
+      <p class="kicker">Settled</p>
+      <h2>Four decisions, and what tipped each one</h2>
+      <p class="lede">These were open while the plan was written. The deciding question for all four turned out to be the same one: what does it take to publish this reliably on GitHub, the App Store and eventually the Play Store?</p>
+    </div>
+
+    <div class="decisions measure">
+      <div class="decision">
+        <h3>Layer 2 is an injected stylesheet</h3>
+        <p>WebKit has a purpose-built API for this, <code>WKContentRuleList</code>, and the plan used it at first. Android's WebView has no equivalent.</p>
+        <p class="verdict">Tipped by: <b>the Play Store.</b> As an ordinary stylesheet, the identical file installs the identical way on both platforms. The WebKit API returns later if Undo ever needs to stop reel video being fetched rather than merely hidden — that is something only it can do.</p>
+      </div>
+      <div class="decision">
+        <h3>Explore redirects to search</h3>
+        <p>The magnifier in Instagram's bottom bar points at <code>/explore/</code>. Blocking that path removes search along with the grid, so the plan sends the magnifier to search instead.</p>
+        <p class="verdict">Tipped by: <b>failing closed.</b> The alternative — load the page and hide the grid with CSS — means a broken selector shows a full screen of exactly what you are avoiding. Cancelling the load cannot fail that way.</p>
+      </div>
+      <div class="decision">
+        <h3>The Xcode project is hand-written</h3>
+        <p>250 lines of Apple's project format, written by hand rather than clicked through Xcode's New Project dialog. It parses, builds, and resolves its package — that is verified.</p>
+        <p class="verdict">Tipped by: <b>CI.</b> Xcode's dialog puts build schemes in a folder that git ignores, which is the classic reason a project builds locally and fails in CI. Writing the file puts a shared scheme in place from the first commit. After the first launch Xcode owns the file either way.</p>
+      </div>
+      <div class="decision">
+        <h3>UndoKit stays a separate package</h3>
+        <p>The pure decision logic — including the login-page guard — sits in its own small Swift package, so its tests run on a Mac in about a second with no iOS simulator involved.</p>
+        <p class="verdict">Tipped by: <b>the Play Store, again.</b> The Android app will need this same logic in Kotlin. Having it isolated in one small package makes that a port of one file rather than an archaeology exercise across the app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap measure">
+    <p>The step-by-step build plan lives at <code>docs/superpowers/plans/2026-09-20-undo-ios-instagram-milestones-0-4.md</code>. It covers milestones 0 through 4 — scaffolding to a working filter — in seven tasks.</p>
+    <p style="margin-top:14px">Before layer 3 is written, the two open-source projects in the handoff — NoScroll and InstaNoReels — are worth reading for their selector lists and scroll-lock technique. Both have already been through the grind of finding which selector actually catches a sponsored post. We read for approach and write our own code, since NoScroll is AGPL and InstaNoReels carries no licence at all.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine (JavaScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test 'engine/**/*.test.js'
+
+  kit:
+    name: UndoKit (Swift)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test --package-path ios/UndoKit
+
+  app:
+    name: App build (unsigned)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          xcodebuild build \
+            -project ios/Undo.xcodeproj \
+            -scheme Undo \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO

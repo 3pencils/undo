@@ -1,0 +1,6 @@
+{
+  "hideIfLinkPrefix": ["/reel/", "/reels/"],
+  "hideIfTextContains": ["Suggested for you", "Suggested posts", "Suggested Reels", "Sponsored"],
+  "articleSelector": "article",
+  "feedRootSelector": "main"
+}

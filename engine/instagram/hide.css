@@ -1,0 +1,23 @@
+/* Undo's static hides for Instagram.
+
+   Installed at document start, before the page body is parsed, so these elements
+   are never painted. Matching is by href and aria-label: class names on
+   instagram.com are generated and change every few weeks.
+
+   The explore link is deliberately absent. The magnifier in the bottom bar points
+   at /explore/ and is the only way to reach search, so it stays visible and the
+   navigation policy sends it to search instead. */
+
+/* The Reels entry in the navigation bar. */
+a[href="/reels/"],
+a[href^="/reels/"],
+[aria-label="Reels"] {
+  display: none !important;
+}
+
+/* "Open in app" banners and App Store interstitials. */
+a[href^="https://apps.apple.com"],
+a[href^="itms-apps:"],
+a[href^="instagram:"] {
+  display: none !important;
+}

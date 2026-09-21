@@ -1,0 +1,4 @@
+{
+  "blocked": ["/reels/", "/explore/"],
+  "allowed": ["/reel/", "/explore/search/"]
+}
