@@ -28,3 +28,30 @@ import Testing
     #expect(InjectionPolicy.allowsInjection(url: nil) == false)
     #expect(InjectionPolicy.allowsInjection(url: URL(string: "about:blank")!) == false)
 }
+
+@Test func guardsEverySpellingOfALoginPageAServerMightAnswerTo() {
+    // A guard that compares raw bytes says "inject" for all of these.
+    let spellings = [
+        "https://www.instagram.com/accounts/login/",
+        "https://www.instagram.com//accounts/login/",
+        "https://www.instagram.com/ACCOUNTS/login/",
+        "https://www.instagram.com/Accounts/Login/",
+        "https://www.instagram.com/x/../accounts/login/",
+        "https://www.instagram.com/%2e%2e/accounts/login/",
+        "https://www.instagram.com/./accounts/login/",
+        "https://www.instagram.com/accounts//login/",
+    ]
+    for spelling in spellings {
+        #expect(
+            InjectionPolicy.allowsInjection(url: URL(string: spelling)!) == false,
+            "\(spelling) is a login page and must not be injected into"
+        )
+    }
+}
+
+@Test func stillInjectsOnPagesThatMerelyResembleTheGuardedOne() {
+    #expect(InjectionPolicy.allowsInjection(path: "/accountsomething/"))
+    #expect(InjectionPolicy.allowsInjection(path: "/my/accounts/"))
+    #expect(InjectionPolicy.allowsInjection(url: URL(string: "https://www.instagram.com/accountancy/")!))
+}
+

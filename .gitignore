@@ -3,6 +3,8 @@ tmp/
 handoffs/
 CLAUDE.md
 HANDOFF.md
+notes.md
+.html-doc-review/
 
 # Swift and Xcode build products
 .build/

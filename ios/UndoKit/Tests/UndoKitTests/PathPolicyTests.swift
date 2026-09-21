@@ -34,3 +34,22 @@ import Testing
     #expect(policy.isBlocked("/reel/other/"))
     #expect(policy.isBlocked("/reel/keepthis/") == false)
 }
+
+@Test func canonicalFoldsTheSpellingsOfOnePath() {
+    #expect(PathPolicy.canonical("/REELS/") == "/reels/")
+    #expect(PathPolicy.canonical("//reels//") == "/reels/")
+    #expect(PathPolicy.canonical("/x/../reels") == "/reels/")
+    #expect(PathPolicy.canonical("/./reels/") == "/reels/")
+    #expect(PathPolicy.canonical("/../reels/") == "/reels/")
+    #expect(PathPolicy.canonical("/") == "/")
+    #expect(PathPolicy.canonical("") == "/")
+}
+
+@Test func blocksTheReelsFeedHoweverItIsSpelled() {
+    let policy = PathPolicy(blocked: ["/reels/", "/explore/"], allowed: ["/reel/", "/explore/search/"])
+    #expect(policy.isBlocked("/REELS/"))
+    #expect(policy.isBlocked("//reels/"))
+    #expect(policy.isBlocked("/Explore/Tags/cats/"))
+    #expect(policy.isBlocked("/REEL/ABC123/") == false)
+}
+

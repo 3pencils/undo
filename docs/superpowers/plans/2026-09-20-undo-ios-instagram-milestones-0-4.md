@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+
+> **Status, 2026-09-21.** Every code step in this plan is implemented on branch
+> `milestones-0-4` and committed. The tests pass (17 JavaScript, 21 Swift) and the
+> app builds clean for a real device. What remains is the on-device verification in
+> Tasks 3, 4, 5, 6 and 7, which needs an iPhone and a signing team. A review found
+> four defects after implementation; the fixes are folded into the blocks below, so
+> this document and the code agree. Where they ever disagree, the code is right.
+
 **Goal:** Ship an iOS app that opens Instagram in an embedded web view with the Reels feed, Explore, suggested posts, sponsored posts and install banners removed, and with the filter script kept off every login page.
 
 **Architecture:** Three filters, cheapest and most robust first: a navigation policy that cancels `/reels/` and the explore grid before anything loads, a stylesheet injected at document start that hides the Reels entry and install banners before the page paints, and a script injected at document end that removes suggested and sponsored posts as the feed loads. The last two share one delivery mechanism — user scripts — so the same files work unchanged in an Android WebView later, which has no equivalent of `WKContentRuleList`. All filter data and logic live in `engine/` as plain JavaScript and JSON. All decision logic lives in two places that run under test on a Mac: `engine/` (tested with `node --test`) and `ios/UndoKit/`, a local Swift package of pure functions (tested with `swift test`). The app target holds only WebKit glue.
@@ -403,17 +411,32 @@ to trust with apps of this kind, so Undo is built so you do not have to.
 
 ## The login-page guard
 
-Undo's filter script is injected only when the URL path is outside `/accounts/`.
-Instagram serves login, two-factor and password recovery from `/accounts/`, so on
-every page where credentials are typed there is no Undo code on the page at all.
+Undo's filter script is installed only when the URL path is outside `/accounts/`.
+Instagram serves login, two-factor and password recovery from `/accounts/`, so a
+page load that lands on one of them carries no Undo code.
 
 The guard runs in the navigation delegate, before each page load begins:
 `InjectionPolicy.allowsInjection(url:)` in `ios/UndoKit` decides, all installed
 user scripts are removed, and they are re-installed only when the answer is yes.
-Anything that is not an ordinary web page with a path is treated as guarded, so
-the failure mode is no injection. The decision is unit-tested in
-`ios/UndoKit/Tests/UndoKitTests/InjectionPolicyTests.swift` and those tests run in
+It compares a canonical form of the path, because a server can answer to more than
+one spelling of the same page: `/ACCOUNTS/login/`, `//accounts/login/` and
+`/x/../accounts/login/` are all guarded. Anything that is not an ordinary web page
+with a path is guarded too, so the failure mode is no injection. Every one of those
+spellings is unit-tested in
+`ios/UndoKit/Tests/UndoKitTests/InjectionPolicyTests.swift`, and those tests run in
 CI on every commit.
+
+One limit, stated plainly because this page is the reason to trust the app.
+Instagram is a single-page app, so it can move between pages without a page load.
+If it routes from a page Undo has filtered into one under `/accounts/` that way,
+the script installed for the earlier page is still running in that document —
+the guard governs what gets installed at a page load, and cannot remove code from
+a document already open. What that code does there is nothing: the feed filter
+returns immediately for any path that is not the home feed, and the app has no
+message handler, no `evaluateJavaScript` call and no network code of its own, so
+nothing a script could observe has anywhere to go. If you would rather not rely on
+that reasoning, reach a login page by launching Undo fresh or by signing out, which
+are page loads, and the guard applies in full.
 
 ## Watching the guard work
 
@@ -426,8 +449,15 @@ builds turn on `isInspectable`, so you can check the guard yourself:
    Develop > [your iPhone] > the Instagram page.
 4. In the console, type `window.__undoFilterPresent`. On the feed it is `true`.
 5. Sign out, land on `/accounts/login/`, reopen the inspector, and type it again.
-   It is `undefined`, and `document.querySelectorAll('script').length` shows no
-   Undo script.
+   It is `undefined`.
+6. For a second, independent signal, type
+   `document.getElementById('undo-static-hides')`. That is the stylesheet Undo
+   installs: an element on the feed, `null` on the login page.
+
+Do not look for Undo in `document.querySelectorAll('script')`. Injected user
+scripts are evaluated directly and never become `<script>` elements, so that list
+looks identical on a filtered page and a guarded one and would tell you nothing
+either way.
 
 ## What Undo sends where
 
@@ -548,6 +578,24 @@ import Testing
     #expect(policy.isBlocked("/reel/other/"))
     #expect(policy.isBlocked("/reel/keepthis/") == false)
 }
+
+@Test func canonicalFoldsTheSpellingsOfOnePath() {
+    #expect(PathPolicy.canonical("/REELS/") == "/reels/")
+    #expect(PathPolicy.canonical("//reels//") == "/reels/")
+    #expect(PathPolicy.canonical("/x/../reels") == "/reels/")
+    #expect(PathPolicy.canonical("/./reels/") == "/reels/")
+    #expect(PathPolicy.canonical("/../reels/") == "/reels/")
+    #expect(PathPolicy.canonical("/") == "/")
+    #expect(PathPolicy.canonical("") == "/")
+}
+
+@Test func blocksTheReelsFeedHoweverItIsSpelled() {
+    let policy = PathPolicy(blocked: ["/reels/", "/explore/"], allowed: ["/reel/", "/explore/search/"])
+    #expect(policy.isBlocked("/REELS/"))
+    #expect(policy.isBlocked("//reels/"))
+    #expect(policy.isBlocked("/Explore/Tags/cats/"))
+    #expect(policy.isBlocked("/REEL/ABC123/") == false)
+}
 ```
 
 - [ ] **Step 3: Run the tests to verify they fail**
@@ -564,7 +612,7 @@ import Foundation
 
 /// Decides whether a URL path is one Undo refuses to open.
 ///
-/// Prefixes are compared against a path that always ends in a slash, so `/reels`
+/// Prefixes are compared against a canonical form of the path, so `/reels`
 /// and `/reels/` are the same thing and `/reel/ABC/` never matches `/reels/`.
 public struct PathPolicy: Sendable, Equatable {
     public let blocked: [String]
@@ -579,13 +627,36 @@ public struct PathPolicy: Sendable, Equatable {
         self.init(blocked: rules.blocked, allowed: rules.allowed)
     }
 
+    /// Gives a path a trailing slash, so a prefix match cannot stop mid-segment.
     public static func normalize(_ path: String) -> String {
         let path = path.isEmpty ? "/" : path
         return path.hasSuffix("/") ? path : path + "/"
     }
 
+    /// Folds every spelling a server may answer to the same page: letter case,
+    /// repeated slashes, `.` and `..` segments, and the trailing slash.
+    ///
+    /// Comparing raw paths answers "not blocked" for `/REELS/` and `//reels/`,
+    /// which is a wrong answer for a blocker and a dangerous one for the guard in
+    /// `InjectionPolicy` that shares this function. `..` never climbs above the
+    /// root, because no server serves anything there.
+    public static func canonical(_ path: String) -> String {
+        var segments: [String] = []
+        for segment in path.lowercased().split(separator: "/", omittingEmptySubsequences: true) {
+            switch segment {
+            case ".":
+                continue
+            case "..":
+                if !segments.isEmpty { segments.removeLast() }
+            default:
+                segments.append(String(segment))
+            }
+        }
+        return "/" + segments.map { $0 + "/" }.joined()
+    }
+
     public func isBlocked(_ path: String) -> Bool {
-        let path = Self.normalize(path)
+        let path = Self.canonical(path)
         if allowed.contains(where: { path.hasPrefix($0) }) { return false }
         return blocked.contains(where: { path.hasPrefix($0) })
     }
@@ -595,7 +666,7 @@ public struct PathPolicy: Sendable, Equatable {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `swift test --package-path ios/UndoKit`
-Expected: PASS, 4 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 6: Write the failing InjectionPolicy tests**
 
@@ -632,6 +703,32 @@ import Testing
     #expect(InjectionPolicy.allowsInjection(url: nil) == false)
     #expect(InjectionPolicy.allowsInjection(url: URL(string: "about:blank")!) == false)
 }
+
+@Test func guardsEverySpellingOfALoginPageAServerMightAnswerTo() {
+    // A guard that compares raw bytes says "inject" for all of these.
+    let spellings = [
+        "https://www.instagram.com/accounts/login/",
+        "https://www.instagram.com//accounts/login/",
+        "https://www.instagram.com/ACCOUNTS/login/",
+        "https://www.instagram.com/Accounts/Login/",
+        "https://www.instagram.com/x/../accounts/login/",
+        "https://www.instagram.com/%2e%2e/accounts/login/",
+        "https://www.instagram.com/./accounts/login/",
+        "https://www.instagram.com/accounts//login/",
+    ]
+    for spelling in spellings {
+        #expect(
+            InjectionPolicy.allowsInjection(url: URL(string: spelling)!) == false,
+            "\(spelling) is a login page and must not be injected into"
+        )
+    }
+}
+
+@Test func stillInjectsOnPagesThatMerelyResembleTheGuardedOne() {
+    #expect(InjectionPolicy.allowsInjection(path: "/accountsomething/"))
+    #expect(InjectionPolicy.allowsInjection(path: "/my/accounts/"))
+    #expect(InjectionPolicy.allowsInjection(url: URL(string: "https://www.instagram.com/accountancy/")!))
+}
 ```
 
 - [ ] **Step 7: Run the tests to verify they fail**
@@ -650,24 +747,27 @@ import Foundation
 ///
 /// Instagram serves login, two-factor and password recovery under `/accounts/`.
 /// Undo's code stays off those pages, so the app holds no position from which it
-/// could read a password. Anything that is not an ordinary web page with a path
-/// is treated as guarded, so the failure mode is no injection.
+/// could read a password.
+///
+/// The comparison is deliberately paranoid. A server may answer to more than one
+/// spelling of the same path, and a guard that compares raw bytes says "inject"
+/// for `/ACCOUNTS/login/`, `//accounts/login/` and `/x/../accounts/login/`. Paths
+/// are standardized and folded before they are matched, and anything that is not
+/// an ordinary web page with a path is treated as guarded, so the failure mode is
+/// always no injection.
 public enum InjectionPolicy {
     public static let guardedPrefixes = ["/accounts/"]
 
     public static func allowsInjection(path: String) -> Bool {
-        let path = PathPolicy.normalize(path)
+        let path = PathPolicy.canonical(path)
         return !guardedPrefixes.contains { path.hasPrefix($0) }
     }
 
     public static func allowsInjection(url: URL?) -> Bool {
-        // The scheme and the leading slash both matter. `about:blank` parses with
-        // a path of "blank", which is not a site path and must not be treated
-        // as one.
         guard let url,
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let components = URLComponents(url: url.standardized, resolvingAgainstBaseURL: false),
               components.path.hasPrefix("/")
         else { return false }
         return allowsInjection(path: components.path)
@@ -678,7 +778,7 @@ public enum InjectionPolicy {
 - [ ] **Step 9: Run the tests to verify they pass**
 
 Run: `swift test --package-path ios/UndoKit`
-Expected: PASS, 8 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 10: Write the failing EngineConfig tests**
 
@@ -813,7 +913,7 @@ public enum EngineConfig {
 - [ ] **Step 13: Run the tests to verify they pass**
 
 Run: `swift test --package-path ios/UndoKit`
-Expected: PASS, 13 tests.
+Expected: PASS, 17 tests.
 
 - [ ] **Step 14: Propose the commit, then wait**
 
@@ -1635,7 +1735,7 @@ public enum ScriptBuilder {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --package-path ios/UndoKit`
-Expected: PASS, 17 tests.
+Expected: PASS, 21 tests.
 
 - [ ] **Step 5: Install the stylesheet**
 
@@ -2243,7 +2343,7 @@ xcodebuild build -project ios/Undo.xcodeproj -scheme Undo \
   -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: 17 JavaScript tests pass, 17 Swift tests pass, `** BUILD SUCCEEDED **`.
+Expected: 17 JavaScript tests pass, 21 Swift tests pass, `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 10: Propose the commit, then wait**
 
