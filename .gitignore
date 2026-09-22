@@ -6,6 +6,7 @@ HANDOFF.md
 notes.md
 .html-doc-review/
 Simulator Screenshot*.png
+screenshots/
 
 # Swift and Xcode build products
 .build/

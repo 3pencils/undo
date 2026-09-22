@@ -1,6 +1,9 @@
 import UIKit
 import WebKit
 import UndoKit
+#if DEBUG
+import OSLog
+#endif
 
 /// Owns one platform's web view: what it loads, what it refuses to load, and
 /// where Undo's own scripts are allowed to run.
@@ -11,6 +14,15 @@ final class WebCoordinator: NSObject {
     private let pathPolicy: PathPolicy
     private let userScripts: [WKUserScript]
 
+    #if DEBUG
+    /// Debug builds narrate where the web view goes, so a screen reached by a
+    /// route Undo does not yet know about can be identified by its URL rather
+    /// than guessed at from a screenshot. Compiled out of release builds, and it
+    /// writes to the local system log only: nothing leaves the device.
+    private static let navigationLog = Logger(subsystem: "com.3pencils.undo", category: "navigation")
+    private var urlObservation: NSKeyValueObservation?
+    #endif
+
     init(platform: Platform) {
         self.platform = platform
         self.pathPolicy = Self.loadPathPolicy(for: platform)
@@ -19,6 +31,14 @@ final class WebCoordinator: NSObject {
     }
 
     func start(_ webView: WKWebView) {
+        #if DEBUG
+        // Instagram moves between pages without loading one, and those hops never
+        // reach the navigation delegate. Watching the url property catches them.
+        urlObservation = webView.observe(\.url, options: [.new]) { _, change in
+            guard let url = change.newValue ?? nil else { return }
+            Self.navigationLog.notice("same-document -> \(url.absoluteString, privacy: .public)")
+        }
+        #endif
         webView.load(URLRequest(url: platform.homeURL))
     }
 
@@ -108,6 +128,12 @@ extension WebCoordinator: WKNavigationDelegate {
             }
             return .cancel
         }
+
+        #if DEBUG
+        Self.navigationLog.notice(
+            "navigate \(String(describing: navigationAction.navigationType.rawValue), privacy: .public) -> \(url.absoluteString, privacy: .public) [blocked=\(self.pathPolicy.isBlocked(url.path), privacy: .public) inject=\(InjectionPolicy.allowsInjection(url: url), privacy: .public)]"
+        )
+        #endif
 
         if pathPolicy.isBlocked(url.path) {
             // The magnifier in Instagram's bottom bar points at /explore/, so
