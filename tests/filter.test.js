@@ -18,24 +18,29 @@ test('feed rules apply to the home feed alone', () => {
   assert.equal(filter.shouldFilterFeed('/someone/'), false);
 });
 
-test('hides a feed item that links to a reel', () => {
-  const descriptor = { hrefs: ['/someone/', '/reel/ABC123/'], text: 'a caption' };
-  assert.equal(filter.shouldHideArticle(descriptor, config), true);
+test('keeps a video posted by someone you follow', () => {
+  // Instagram puts an "Original audio" link under /reels/ on every video post,
+  // so judging a post by its links hid every video in the feed.
+  const descriptor = {
+    text: 'livelylyrics_\nOriginal audio\na caption',
+    labels: ['livelylyrics_', 'Original audio', 'Audio is muted'],
+  };
+  assert.equal(filter.shouldHideArticle(descriptor, config), false);
 });
 
 test('hides suggested posts by phrase and adverts by label', () => {
   assert.equal(
-    filter.shouldHideArticle({ hrefs: ['/p/XYZ/'], text: 'Suggested for you' }, config),
+    filter.shouldHideArticle({ text: 'Suggested for you' }, config),
     true
   );
   assert.equal(
-    filter.shouldHideArticle({ hrefs: ['/p/XYZ/'], text: 'x', labels: ['Sponsored'] }, config),
+    filter.shouldHideArticle({ text: 'x', labels: ['Sponsored'] }, config),
     true
   );
 });
 
 test('keeps an ordinary post from a followed account', () => {
-  const descriptor = { hrefs: ['/someone/', '/p/XYZ789/'], text: 'nice photo' };
+  const descriptor = { text: 'nice photo' };
   assert.equal(filter.shouldHideArticle(descriptor, config), false);
 });
 
@@ -43,21 +48,23 @@ test('filterFeed hides the right articles and counts them', () => {
   const doc = fakeDocument({
     path: '/',
     articles: [
-      { hrefs: ['/p/AAA/'], text: 'a photo' },
-      { hrefs: ['/reel/BBB/'], text: 'a reel' },
-      { hrefs: ['/p/CCC/'], text: 'a caption', labels: ['brand', 'Ad'] },
+      { text: 'a photo from a friend', labels: ['friend'] },
+      { text: 'a video from a friend', labels: ['friend', 'Original audio'] },
+      { text: 'a caption', labels: ['brand', 'Ad'] },
+      { text: 'Suggested for you', labels: ['stranger'] },
     ],
   });
   assert.equal(filter.filterFeed(doc, config), 2);
-  assert.equal(doc.articles[0].style.display, '');
-  assert.equal(doc.articles[1].style.display, 'none');
-  assert.equal(doc.articles[2].style.display, 'none');
+  assert.equal(doc.articles[0].style.display, '', 'a photo stays');
+  assert.equal(doc.articles[1].style.display, '', 'a video from a followed account stays');
+  assert.equal(doc.articles[2].style.display, 'none', 'an advert goes');
+  assert.equal(doc.articles[3].style.display, 'none', 'a suggested post goes');
 });
 
 test('filterFeed leaves every other page alone', () => {
   const doc = fakeDocument({
     path: '/direct/inbox/',
-    articles: [{ hrefs: ['/reel/BBB/'], text: 'a reel someone sent' }],
+    articles: [{ text: 'a reel someone sent' }],
   });
   assert.equal(filter.filterFeed(doc, config), 0);
   assert.equal(doc.articles[0].style.display, '');
@@ -66,7 +73,7 @@ test('filterFeed leaves every other page alone', () => {
 test('filterFeed shows an article again when a recycled node stops matching', () => {
   const doc = fakeDocument({
     path: '/',
-    articles: [{ hrefs: ['/p/AAA/'], text: 'a photo', display: 'none' }],
+    articles: [{ text: 'a photo', display: 'none' }],
   });
   assert.equal(filter.filterFeed(doc, config), 0);
   assert.equal(doc.articles[0].style.display, '');
@@ -105,7 +112,6 @@ test('applyReelLock removes the lock when the page changes', () => {
 
 test('hides an advert by its label, which Instagram writes as "Ad"', () => {
   const descriptor = {
-    hrefs: ['/capitalone/', '/p/AAA/'],
     text: 'capitalone Ad Earn $250 with 360 Checking',
     labels: ['capitalone', 'Ad', '617'],
   };
@@ -117,7 +123,6 @@ test('does not hide a post merely for containing the letters of a label', () => 
   const captions = ['Adam at the beach', 'some advice', 'Adidas haul', 'a radio show'];
   for (const caption of captions) {
     const descriptor = {
-      hrefs: ['/friend/', '/p/BBB/'],
       text: caption,
       labels: ['friend', caption, '42'],
     };
@@ -129,23 +134,40 @@ test('does not hide a post merely for containing the letters of a label', () => 
   }
 });
 
-test('collects short leaf lines as labels and ignores long ones', () => {
-  const article = {
-    labels: ['Ad', 'capitalone'],
-    hrefs: ['/p/AAA/'],
-    text: 'x',
-  };
-  const doc = fakeDocument({ path: '/', articles: [article] });
+test('reads short lines as labels and leaves long ones out', () => {
+  const caption = 'a caption far too long to be a label beside an account name';
+  const doc = fakeDocument({
+    path: '/',
+    articles: [{ labels: ['Ad', 'capitalone'], text: caption }],
+  });
   const described = filter.describeArticle(doc.articles[0]);
-  assert.deepEqual(Array.from(described.labels), ['Ad', 'capitalone']);
+  assert.ok(described.labels.includes('Ad'), 'the advert label is a label');
+  assert.ok(described.labels.includes('capitalone'), 'the account name is a label');
+  assert.ok(!described.labels.includes(caption), 'a caption is not a label');
+  assert.ok(described.text.includes(caption), 'but it is part of the text');
+});
+
+test('stops reading after the scan limit, however long the post is', () => {
+  const lines = [];
+  for (let i = 0; i < filter.LABEL_SCAN_LIMIT * 4; i += 1) {
+    lines.push('line' + i);
+  }
+  lines.push('Ad');
+  const doc = fakeDocument({ path: '/', articles: [{ labels: lines }] });
+  const described = filter.describeArticle(doc.articles[0]);
+  assert.equal(described.labels.length, filter.LABEL_SCAN_LIMIT);
+  assert.ok(
+    !described.labels.includes('Ad'),
+    'a label past the limit is not read, which is the cost of a bounded scan'
+  );
 });
 
 test('filterFeed hides an advert in a real-shaped feed', () => {
   const doc = fakeDocument({
     path: '/',
     articles: [
-      { hrefs: ['/p/AAA/'], text: 'Adam at the beach', labels: ['friend', 'Adam at the beach'] },
-      { hrefs: ['/p/BBB/'], text: 'capitalone Ad', labels: ['capitalone', 'Ad'] },
+      { text: 'Adam at the beach', labels: ['friend', 'Adam at the beach'] },
+      { text: 'capitalone Ad', labels: ['capitalone', 'Ad'] },
     ],
   });
   assert.equal(filter.filterFeed(doc, config), 1);

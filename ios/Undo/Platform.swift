@@ -16,7 +16,10 @@ struct Platform: Identifiable, Hashable, Sendable {
         id: "instagram",
         title: "Instagram",
         systemImage: "camera",
-        homeURL: URL(string: "https://www.instagram.com/")!,
+        // The Following feed, not the algorithmic one. Instagram's default "For you"
+        // feed injects suggested accounts by design, so asking for Following
+        // removes them at the source instead of hiding them one phrase at a time.
+        homeURL: URL(string: "https://www.instagram.com/?variant=following")!,
         searchURL: URL(string: "https://www.instagram.com/explore/search/"),
         engineDirectory: "instagram",
         allowedHostSuffixes: ["instagram.com", "cdninstagram.com", "fbcdn.net"]

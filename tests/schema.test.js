@@ -60,13 +60,12 @@ test('hide.css matches on attributes, never on class names', () => {
 
 test('feed.json lists the feed heuristics', () => {
   const feed = readJSON('instagram/feed.json');
-  for (const key of ['hideIfLinkPrefix', 'hideIfTextContains', 'hideIfExactText']) {
+  for (const key of ['hideIfTextContains', 'hideIfExactText']) {
     assert.ok(Array.isArray(feed[key]) && feed[key].length > 0, `${key} is a non-empty array`);
     feed[key].forEach((v) => assert.ok(typeof v === 'string' && v.length > 0));
   }
   assert.equal(typeof feed.articleSelector, 'string');
   assert.equal(typeof feed.feedRootSelector, 'string');
-  feed.hideIfLinkPrefix.forEach((p, i) => assertPathPrefix(p, `hideIfLinkPrefix[${i}]`));
   // A label is matched whole, so a short one is safe here and unsafe in the
   // substring list. Guard the distinction that keeps "Ad" from hiding "Adam".
   feed.hideIfTextContains.forEach((phrase) =>

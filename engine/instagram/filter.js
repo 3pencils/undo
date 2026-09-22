@@ -29,39 +29,42 @@
 
   api.LABEL_MAX_LENGTH = 24;
 
+  /* How many text nodes to read from the top of a post. Instagram puts the
+     account name and the "Ad" label first, so the labels that decide a post are
+     always in the first handful of lines. Reading only those costs the same on a
+     photo and on a thousand-comment thread; reading the whole post, once per
+     animation frame, starves the page and the feed never renders. */
+  api.LABEL_SCAN_LIMIT = 40;
+
   api.describeArticle = function (element) {
-    var anchors = element.querySelectorAll('a[href]');
-    var hrefs = [];
-    for (var i = 0; i < anchors.length; i += 1) {
-      hrefs.push(anchors[i].getAttribute('href') || '');
-    }
-    /* Instagram labels an advert with the word "Ad" on a line of its own. That
-       is far too short to look for inside an article's whole text, which would
-       hide any post mentioning Adam or advice, so the short leaf lines are
-       collected separately and matched whole. */
+    /* One walk collects both: the joined lines for phrase matching, and the
+       short lines on their own for whole-label matching. "Ad" is far too short
+       to look for inside a post's text, which would hide anything mentioning
+       Adam or advice. */
     var labels = [];
-    var candidates = element.querySelectorAll('span, div, a, h1, h2, h3');
-    for (var j = 0; j < candidates.length; j += 1) {
-      if (candidates[j].children.length > 0) {
+    var lines = [];
+    var walker = element.ownerDocument.createTreeWalker(element, 4 /* TEXT_NODE */);
+    var read = 0;
+    while (read < api.LABEL_SCAN_LIMIT && walker.nextNode()) {
+      read += 1;
+      var value = (walker.currentNode.nodeValue || '').trim();
+      if (!value) {
         continue;
       }
-      var label = (candidates[j].textContent || '').trim();
-      if (label && label.length <= api.LABEL_MAX_LENGTH) {
-        labels.push(label);
+      lines.push(value);
+      if (value.length <= api.LABEL_MAX_LENGTH) {
+        labels.push(value);
       }
     }
-    return { hrefs: hrefs, text: element.textContent || '', labels: labels };
+
+    return { text: lines.join('\n'), labels: labels };
   };
 
+  /* Judged by what a post says, not by the links it carries. Instagram puts an
+     "Original audio" link under /reels/ on every video post, so matching links in
+     the reels namespace hid every video from every account you follow. */
   api.shouldHideArticle = function (descriptor, config) {
-    var i, j;
-    for (i = 0; i < descriptor.hrefs.length; i += 1) {
-      for (j = 0; j < config.hideIfLinkPrefix.length; j += 1) {
-        if (descriptor.hrefs[i].indexOf(config.hideIfLinkPrefix[j]) === 0) {
-          return true;
-        }
-      }
-    }
+    var i;
     for (i = 0; i < config.hideIfTextContains.length; i += 1) {
       if (descriptor.text.indexOf(config.hideIfTextContains[i]) !== -1) {
         return true;
@@ -124,26 +127,25 @@
     return true;
   };
 
+  /* The feed mutates constantly while it loads, and hiding a post mutates it
+     again, so an unthrottled observer runs the filter against itself. */
+  api.PASS_INTERVAL_MS = 250;
+
   api.start = function (doc, config) {
     var win = doc.defaultView;
-    var scheduled = false;
+    var timer = null;
 
     function run() {
-      scheduled = false;
+      timer = null;
       api.filterFeed(doc, config);
       api.applyReelLock(doc);
     }
 
     function schedule() {
-      if (scheduled) {
+      if (timer !== null) {
         return;
       }
-      scheduled = true;
-      if (win && win.requestAnimationFrame) {
-        win.requestAnimationFrame(run);
-      } else {
-        run();
-      }
+      timer = win.setTimeout(run, api.PASS_INTERVAL_MS);
     }
 
     run();

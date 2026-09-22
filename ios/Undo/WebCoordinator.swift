@@ -109,6 +109,40 @@ final class WebCoordinator: NSObject {
 }
 
 extension WebCoordinator: WKNavigationDelegate {
+    #if DEBUG
+    /// Reports what the filter did, so a feed that looks empty can be told apart
+    /// from a feed the filter emptied.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in
+            for _ in 0..<6 {
+                try? await Task.sleep(for: .seconds(3))
+                let script = """
+                (function () {
+                  var articles = document.querySelectorAll('main article');
+                  var hidden = 0, reasons = [];
+                  for (var i = 0; i < articles.length; i += 1) {
+                    if (articles[i].style.display === 'none') {
+                      hidden += 1;
+                      var d = window.UndoInstagram
+                        ? window.UndoInstagram.describeArticle(articles[i]) : null;
+                      if (d && reasons.length < 3) {
+                        reasons.push(d.hrefs.slice(0, 4).join(' ') + ' | ' + d.labels.slice(0, 4).join(','));
+                      }
+                    }
+                  }
+                  return 'articles=' + articles.length + ' hidden=' + hidden +
+                         ' spinner=' + !!document.querySelector('main [role="progressbar"], main svg[aria-label*="Loading"]') +
+                         (reasons.length ? ' :: ' + reasons.join(' // ') : '');
+                })()
+                """
+                if let value = try? await webView.evaluateJavaScript(script) {
+                    Self.navigationLog.notice("filter \(String(describing: value), privacy: .public)")
+                }
+            }
+        }
+    }
+    #endif
+
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction

@@ -30,14 +30,31 @@ export function readEngineJSON(relativePath) {
    is the point: the parts of the filter that need a real browser are verified on
    the phone instead. */
 export function fakeDocument({ path = '/', articles = [] } = {}) {
+  /* filter.js reads a post through a TreeWalker over its text nodes, so the
+     stub hands back one text node per line. */
+  function walkerOver(lines) {
+    let index = -1;
+    return {
+      currentNode: null,
+      nextNode() {
+        index += 1;
+        if (index >= lines.length) {
+          return null;
+        }
+        this.currentNode = { nodeValue: lines[index] };
+        return this.currentNode;
+      },
+    };
+  }
+
+  const ownerDocument = { createTreeWalker: (root) => walkerOver(root.lines) };
+
   const nodes = articles.map((article) => ({
     style: { display: article.display || '' },
-    textContent: article.text || '',
-    // filter.js asks for anchors by one selector and label elements by another.
-    querySelectorAll: (selector) =>
-      selector === 'a[href]'
-        ? (article.hrefs || []).map((href) => ({ getAttribute: () => href }))
-        : (article.labels || []).map((label) => ({ children: [], textContent: label })),
+    lines: (article.labels || []).concat(article.text ? [article.text] : []),
+    ownerDocument,
+    querySelectorAll: () =>
+      (article.hrefs || []).map((href) => ({ getAttribute: () => href })),
   }));
 
   const head = {

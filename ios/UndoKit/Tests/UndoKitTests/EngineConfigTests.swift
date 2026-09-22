@@ -38,7 +38,6 @@ func engineData(_ relativePath: String) throws -> Data {
     let rules = try EngineConfig.decodeFeedRules(engineData("instagram/feed.json"))
     #expect(rules.articleSelector == "article")
     #expect(rules.feedRootSelector == "main")
-    #expect(rules.hideIfLinkPrefix.contains("/reel/"))
     // "Ad" is the label Instagram's mobile web actually uses, and it is matched
     // whole rather than as a substring, so it belongs in this list and not the other.
     #expect(rules.hideIfExactText.contains("Ad"))
