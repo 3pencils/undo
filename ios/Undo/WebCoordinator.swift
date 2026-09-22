@@ -46,7 +46,10 @@ final class WebCoordinator: NSObject {
         // has to find it, hide it, or re-decide it on every mutation.
         if let data = EngineBundle.data("\(platform.engineDirectory)/prune.json"),
            let rules = try? EngineConfig.decodePruneRules(data),
-           let config = try? ScriptBuilder.pruneConfigScript(rules: rules),
+           let config = try? ScriptBuilder.pruneConfigScript(
+               rules: rules,
+               guardedPrefixes: Self.loadPathRules(for: platform).guarded
+           ),
            let prune = EngineBundle.string("\(platform.engineDirectory)/prune.js") {
             scripts.append(
                 WKUserScript(source: config, injectionTime: .atDocumentStart, forMainFrameOnly: true)

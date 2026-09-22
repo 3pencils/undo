@@ -51,11 +51,26 @@ public enum ScriptBuilder {
         return "window.UndoConfig = \(literal);"
     }
 
-    /// The data filter's rules, as one assignment to a global.
-    public static func pruneConfigScript(rules: PruneRules) throws -> String {
+    /// The data filter's rules and the guarded paths, as one assignment to a global.
+    ///
+    /// The guarded prefixes travel with the rules for the same reason the page filter
+    /// gets them: the app cannot withhold a script from a page it never loads, and a
+    /// wrapper installed for an earlier page is still the document's `JSON.parse`
+    /// after Instagram routes into `/accounts/` without a page load.
+    public static func pruneConfigScript(rules: PruneRules, guardedPrefixes: [String]) throws -> String {
+        struct PageConfig: Encodable {
+            let depthLimit: Int
+            let rules: [PruneRules.Rule]
+            let guardedPrefixes: [String]
+        }
+        let config = PageConfig(
+            depthLimit: rules.depthLimit,
+            rules: rules.rules,
+            guardedPrefixes: guardedPrefixes
+        )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let literal = String(decoding: try encoder.encode(rules), as: UTF8.self)
+        let literal = String(decoding: try encoder.encode(config), as: UTF8.self)
         return "window.UndoPruneConfig = \(literal);"
     }
 }

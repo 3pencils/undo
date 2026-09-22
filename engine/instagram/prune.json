@@ -12,7 +12,7 @@
       "container": "xdt_api__v1__clips__discover__connection_v2",
       "array": "edges",
       "keep": 0,
-      "note": "The suggested-reel queue. Opening a reel from a DM seeds a queue of reels from accounts you do not follow, and every swipe fetches another page of it. Keeping even one edge per page hands over one fresh reel per swipe, which is the queue delivered slowly rather than stopped, so this empties it. The reel someone sent you arrives with the conversation, not through this connection, and still plays.",
+      "note": "The suggested-reel queue. Opening a reel from a DM seeds a queue of reels from accounts you do not follow, and every swipe fetches another page of it, so keeping even one item per page hands over one fresh reel per swipe. The reel someone sent you arrives with the conversation rather than through this connection, and still plays.",
       "gate": "clips__discover"
     }
   ]

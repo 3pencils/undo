@@ -1,8 +1,13 @@
 /* Undo's Instagram filter.
 
-   Injected at document end on every page whose path is outside /accounts/.
-   Everything above `start` is a pure function with no DOM in it, and those are
-   what the tests in engine/test cover. The DOM pass is kept thin on purpose.
+   Injected at document end on every page whose path is outside the guarded list,
+   and it stops itself on a guarded path reached without a page load.
+
+   The decisions live in pure functions — normalizePath, isGuardedPath,
+   shouldFilterFeed, shouldHideArticle, singleReelId — and those are what the tests
+   in tests/ cover exhaustively. The functions around them read and write the page,
+   and are kept as thin as the job allows, because a browser is the only honest test
+   of those.
 
    Selectors and phrases arrive in window.UndoConfig, which the app fills from
    engine/instagram/feed.json before this file runs. */

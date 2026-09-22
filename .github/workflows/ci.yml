@@ -1,9 +1,8 @@
 name: CI
 
-on:
-  push:
-    branches: [main]
-  pull_request:
+# Every commit, on every branch. README and SECURITY both tell readers that each
+# commit is built in public, and a branch filter would quietly make that false.
+on: [push, pull_request]
 
 jobs:
   engine:
