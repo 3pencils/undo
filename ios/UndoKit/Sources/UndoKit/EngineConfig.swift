@@ -21,17 +21,21 @@ public struct FeedRules: Codable, Sendable, Equatable {
     public let hideIfExactText: [String]
     public let articleSelector: String
     public let feedRootSelector: String
+    /// Where Instagram's Home button should go.
+    public let homeFeedHref: String
 
     public init(
         hideIfTextContains: [String],
         hideIfExactText: [String],
         articleSelector: String,
-        feedRootSelector: String
+        feedRootSelector: String,
+        homeFeedHref: String
     ) {
         self.hideIfTextContains = hideIfTextContains
         self.hideIfExactText = hideIfExactText
         self.articleSelector = articleSelector
         self.feedRootSelector = feedRootSelector
+        self.homeFeedHref = homeFeedHref
     }
 }
 

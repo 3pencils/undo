@@ -36,6 +36,7 @@ public enum ScriptBuilder {
             let hideIfExactText: [String]
             let articleSelector: String
             let feedRootSelector: String
+            let homeFeedHref: String
             let guardedPrefixes: [String]
         }
         let config = PageConfig(
@@ -43,6 +44,7 @@ public enum ScriptBuilder {
             hideIfExactText: feedRules.hideIfExactText,
             articleSelector: feedRules.articleSelector,
             feedRootSelector: feedRules.feedRootSelector,
+            homeFeedHref: feedRules.homeFeedHref,
             guardedPrefixes: guardedPrefixes
         )
         let encoder = JSONEncoder()

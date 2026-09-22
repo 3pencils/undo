@@ -206,3 +206,27 @@ test('releaseReelLock removes the lock whatever the path', () => {
   assert.equal(doc.head.children.length, 0);
 });
 
+test('points Instagram\'s Home button at the Following feed', () => {
+  const doc = fakeDocument({ path: '/', links: ['/', '/?nb=l', '/someone/'] });
+  assert.equal(filter.retargetHomeLinks(doc, config), 2);
+  assert.equal(doc.links[0].href, '/?variant=following');
+  assert.equal(doc.links[1].href, '/?variant=following');
+  assert.equal(doc.links[2].href, '/someone/', 'a profile link is not a home link');
+});
+
+test('leaves the feed switcher alone, so the choice stays the reader\'s', () => {
+  const doc = fakeDocument({
+    path: '/',
+    links: ['/?variant=following', '/?variant=favorites', '/?variant=home'],
+  });
+  assert.equal(filter.retargetHomeLinks(doc, config), 0);
+  assert.equal(doc.links[1].href, '/?variant=favorites');
+  assert.equal(doc.links[2].href, '/?variant=home');
+});
+
+test('does nothing when no home feed is configured', () => {
+  const doc = fakeDocument({ path: '/', links: ['/'] });
+  assert.equal(filter.retargetHomeLinks(doc, {}), 0);
+  assert.equal(doc.links[0].href, '/');
+});
+

@@ -29,7 +29,7 @@ export function readEngineJSON(relativePath) {
 /* A document with only the surface filter.js touches. Small enough to read, which
    is the point: the parts of the filter that need a real browser are verified on
    the phone instead. */
-export function fakeDocument({ path = '/', articles = [] } = {}) {
+export function fakeDocument({ path = '/', articles = [], links = [] } = {}) {
   /* filter.js reads a post through a TreeWalker over its text nodes, so the
      stub hands back one text node per line. */
   function walkerOver(lines) {
@@ -66,12 +66,17 @@ export function fakeDocument({ path = '/', articles = [] } = {}) {
     },
   };
 
-  return {
+  const doc = {
     location: { pathname: path },
     head,
     body: null,
     articles: nodes,
     querySelector: () => ({ querySelectorAll: () => nodes }),
+    links: (links || []).map((href) => ({
+      href,
+      getAttribute: function () { return this.href; },
+      setAttribute: function (_, value) { this.href = value; },
+    })),
     getElementById(id) {
       return head.children.find((node) => node.id === id) || null;
     },
@@ -85,4 +90,14 @@ export function fakeDocument({ path = '/', articles = [] } = {}) {
       };
     },
   };
+  /* Honours the one selector filter.js asks the document for. A stub that
+     returns everything regardless of selector would let a bug through that the
+     real DOM would have caught. */
+  doc.querySelectorAll = (selector) => {
+    if (selector === 'a[href="/"], a[href^="/?"]') {
+      return doc.links.filter((a) => a.href === '/' || a.href.startsWith('/?'));
+    }
+    return doc.links;
+  };
+  return doc;
 }

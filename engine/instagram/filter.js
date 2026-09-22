@@ -99,6 +99,32 @@
     return false;
   };
 
+  /* Instagram's Home button goes to the algorithmic feed. The app opens the
+     Following feed instead, and a single tap of Home would otherwise undo that
+     for the rest of the session, so Home is pointed where the app already goes.
+
+     Links that already name a feed are left alone: the switcher at the top of
+     the screen offers For you and Favourites, and those stay reachable. Choosing
+     the feed is the app's whole reason for existing; taking the choice away is
+     not. */
+  api.retargetHomeLinks = function (doc, config) {
+    var target = config.homeFeedHref;
+    if (!target) {
+      return 0;
+    }
+    var links = doc.querySelectorAll('a[href="/"], a[href^="/?"]');
+    var changed = 0;
+    for (var i = 0; i < links.length; i += 1) {
+      var href = links[i].getAttribute('href') || '';
+      if (href === target || href.indexOf('variant=') !== -1) {
+        continue;
+      }
+      links[i].setAttribute('href', target);
+      changed += 1;
+    }
+    return changed;
+  };
+
   /* A hidden post keeps a one-pixel box rather than being removed from layout.
      Instagram decides when to load more posts with an IntersectionObserver, and a
      post with no box is never intersected, so display:none stops the feed from
@@ -177,14 +203,30 @@
     var win = doc.defaultView;
     var timer = null;
 
+    /* What each pass costs. A filter that runs on every page mutation is the
+       first thing to suspect when a page feels slow, and a number settles it
+       where an opinion does not. Read it from Safari's inspector as
+       window.__undoFilter. */
+    var stats = { passes: 0, totalMs: 0, maxMs: 0, hidden: 0 };
+
     function run() {
       timer = null;
       if (api.isGuardedPath(doc.location.pathname, config)) {
         api.releaseReelLock(doc);
         return;
       }
-      api.filterFeed(doc, config);
+      var started = (win.performance && win.performance.now) ? win.performance.now() : 0;
+      api.retargetHomeLinks(doc, config);
+      stats.hidden = api.filterFeed(doc, config);
       api.applyReelLock(doc);
+      if (started) {
+        var spent = win.performance.now() - started;
+        stats.passes += 1;
+        stats.totalMs += spent;
+        if (spent > stats.maxMs) {
+          stats.maxMs = spent;
+        }
+      }
     }
 
     function schedule() {
@@ -211,7 +253,9 @@
     });
     win.addEventListener('popstate', schedule);
 
-    return { run: run, schedule: schedule, observer: observer };
+    global.__undoFilter = stats;
+
+    return { run: run, schedule: schedule, observer: observer, stats: stats };
   };
 
   global.UndoInstagram = api;

@@ -1,6 +1,14 @@
 {
-  "hideIfTextContains": ["Suggested for you", "Suggested posts", "Suggested Reels"],
-  "hideIfExactText": ["Ad", "Sponsored"],
+  "hideIfTextContains": [
+    "Suggested for you",
+    "Suggested posts",
+    "Suggested Reels"
+  ],
+  "hideIfExactText": [
+    "Ad",
+    "Sponsored"
+  ],
   "articleSelector": "article",
-  "feedRootSelector": "main"
+  "feedRootSelector": "main",
+  "homeFeedHref": "/?variant=following"
 }
