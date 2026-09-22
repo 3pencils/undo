@@ -1,9 +1,6 @@
 import UIKit
 import WebKit
 import UndoKit
-#if DEBUG
-import OSLog
-#endif
 
 /// Owns one platform's web view: what it loads, what it refuses to load, and
 /// where Undo's own scripts are allowed to run.
@@ -15,16 +12,6 @@ final class WebCoordinator: NSObject {
     private let injectionPolicy: InjectionPolicy
     private let userScripts: [WKUserScript]
 
-    #if DEBUG
-    /// Debug builds narrate where the web view goes, so a screen reached by a
-    /// route Undo does not yet know about can be identified by its URL rather
-    /// than guessed at from a screenshot. Compiled out of release builds, and it
-    /// writes to the local system log only: nothing leaves the device.
-    private static let navigationLog = Logger(subsystem: "com.3pencils.undo", category: "navigation")
-    private var urlObservation: NSKeyValueObservation?
-    private var probe: Task<Void, Never>?
-    #endif
-
     init(platform: Platform) {
         self.platform = platform
         let rules = Self.loadPathRules(for: platform)
@@ -35,14 +22,6 @@ final class WebCoordinator: NSObject {
     }
 
     func start(_ webView: WKWebView) {
-        #if DEBUG
-        // Instagram moves between pages without loading one, and those hops never
-        // reach the navigation delegate. Watching the url property catches them.
-        urlObservation = webView.observe(\.url, options: [.new]) { _, change in
-            guard let url = change.newValue ?? nil else { return }
-            Self.navigationLog.notice("same-document -> \(url.absoluteString, privacy: .public)")
-        }
-        #endif
         webView.load(URLRequest(url: platform.homeURL))
     }
 
@@ -131,57 +110,6 @@ final class WebCoordinator: NSObject {
 }
 
 extension WebCoordinator: WKNavigationDelegate {
-    #if DEBUG
-    /// Reports what is on screen every few seconds, so a screen Undo does not yet
-    /// recognise can be identified without a screenshot. Debug builds only.
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard probe == nil else { return }
-        probe = Task { @MainActor [weak webView] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard let webView else { return }
-                let script = """
-                (function () {
-                  function texts(selector, limit) {
-                    var out = [], nodes = document.querySelectorAll(selector);
-                    for (var i = 0; i < nodes.length && out.length < limit; i += 1) {
-                      var t = (nodes[i].textContent || '').trim();
-                      if (t && t.length < 30) out.push(t);
-                    }
-                    return out;
-                  }
-                  var articles = document.querySelectorAll('main article');
-                  var hidden = 0;
-                  for (var i = 0; i < articles.length; i += 1) {
-                    if (articles[i].style.display === 'none') hidden += 1;
-                  }
-                  var adLabels = 0, all = document.querySelectorAll('span, div');
-                  for (var j = 0; j < all.length; j += 1) {
-                    if (all[j].children.length === 0 && (all[j].textContent || '').trim() === 'Ad') adLabels += 1;
-                  }
-                  return [
-                    'path=' + location.pathname + location.search,
-                    'articles=' + articles.length,
-                    'hidden=' + hidden,
-                    'videos=' + document.querySelectorAll('video').length,
-                    'adLabels=' + adLabels,
-                    'dialogs=' + document.querySelectorAll('[role="dialog"]').length,
-                    'buttons=[' + texts('button', 6).join('|') + ']',
-                    'headings=[' + texts('h1, h2, header span, header div', 4).join('|') + ']',
-                    'pruned=' + (window.__undoPruned
-                      ? window.__undoPruned.seen + '/' + window.__undoPruned.pruned : 'ABSENT'),
-                    'fields=[' + (window.__undoPruned
-                      ? Object.keys(window.__undoPruned.fields).join('|') : '') + ']'
-                  ].join(' ');
-                })()
-                """
-                if let value = try? await webView.evaluateJavaScript(script) {
-                    Self.navigationLog.notice("screen \(String(describing: value), privacy: .public)")
-                }
-            }
-        }
-    }
-    #endif
 
     func webView(
         _ webView: WKWebView,
@@ -202,12 +130,6 @@ extension WebCoordinator: WKNavigationDelegate {
             }
             return .cancel
         }
-
-        #if DEBUG
-        Self.navigationLog.notice(
-            "navigate \(String(describing: navigationAction.navigationType.rawValue), privacy: .public) -> \(url.absoluteString, privacy: .public) [blocked=\(self.pathPolicy.isBlocked(url.path), privacy: .public) inject=\(self.injectionPolicy.allowsInjection(url: url), privacy: .public)]"
-        )
-        #endif
 
         if pathPolicy.isBlocked(url.path) {
             // The magnifier in Instagram's bottom bar points at /explore/, so
