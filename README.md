@@ -53,8 +53,8 @@ swift test --package-path ios/UndoKit  # policy logic
 Neither needs Xcode signing or an Apple account. To run the app on a phone, open
 `ios/Undo.xcodeproj`, and under the Undo target's Signing & Capabilities set Team to
 your own Apple ID — a free one works, at the cost of a build that stops launching
-after seven days. The project ships with no development team, so this step is yours
-and Xcode will stop until you do it.
+after seven days. The project carries the maintainer's team, so Xcode will refuse to
+sign until you change it to yours; that is one dropdown.
 
 ## Licence
 
