@@ -165,7 +165,7 @@ test('install tallies field names even when there is nothing to prune', () => {
   assert.ok(Object.keys(counts.fields).includes('xdt_api__v1__feed__timeline__connection'));
 });
 
-test('keeps the reel that was sent and drops the queue behind it', () => {
+test('empties the suggested-reel queue, page by page', () => {
   const payload = {
     data: {
       xdt_api__v1__clips__discover__connection_v2: {
@@ -180,13 +180,14 @@ test('keeps the reel that was sent and drops the queue behind it', () => {
   };
   assert.equal(prune.pruneArrays(payload, config.rules, config.depthLimit), 1);
   const edges = payload.data.xdt_api__v1__clips__discover__connection_v2.edges;
-  assert.equal(edges.length, 1, 'nothing left to swipe to');
-  assert.equal(edges[0].node.media.code, 'the-one-sent-to-me', 'and it is the right one');
+  // Every swipe fetches another page of this connection, so leaving even one edge
+  // per page hands over one fresh reel per swipe: the queue, delivered slowly.
+  assert.equal(edges.length, 0, 'nothing left to swipe to, on any page');
 });
 
-test('a queue already at its limit is left alone', () => {
+test('an already empty queue needs no work', () => {
   const payload = {
-    data: { xdt_api__v1__clips__discover__connection_v2: { edges: [{ node: { id: 'only' } }] } },
+    data: { xdt_api__v1__clips__discover__connection_v2: { edges: [] } },
   };
   assert.equal(prune.pruneArrays(payload, config.rules, config.depthLimit), 0);
 });

@@ -169,7 +169,7 @@ extension WebCoordinator: WKNavigationDelegate {
                     'buttons=[' + texts('button', 6).join('|') + ']',
                     'headings=[' + texts('h1, h2, header span, header div', 4).join('|') + ']',
                     'pruned=' + (window.__undoPruned
-                      ? window.__undoPruned.seen + '/' + window.__undoPruned.pruned + '/fetch' + window.__undoPruned.fetchMatched : 'ABSENT'),
+                      ? window.__undoPruned.seen + '/' + window.__undoPruned.pruned : 'ABSENT'),
                     'fields=[' + (window.__undoPruned
                       ? Object.keys(window.__undoPruned.fields).join('|') : '') + ']'
                   ].join(' ');
