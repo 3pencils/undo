@@ -116,11 +116,46 @@
     return false;
   };
 
+  /* Wrapping JSON.parse catches the payload Instagram inlines in the first page,
+     which is where story adverts live. Anything fetched afterwards may be read with
+     Response.json(), which is native and never calls the page's JSON.parse, so this
+     counts what arrives that way to establish where a surface's data really comes
+     from. It reads and changes nothing: the response handed to Instagram is the
+     original object, untouched. */
+  api.observeFetch = function (scope, rules, counts) {
+    var originalFetch = scope.fetch;
+    if (typeof originalFetch !== 'function') {
+      return;
+    }
+    scope.fetch = function () {
+      var result = originalFetch.apply(this, arguments);
+      if (!result || typeof result.then !== 'function') {
+        return result;
+      }
+      return result.then(function (response) {
+        try {
+          if (!response || typeof response.clone !== 'function') {
+            return response;
+          }
+          response.clone().text().then(function (text) {
+            api.tallyFields(text, counts.fields);
+            if (api.isWorthWalking(text, rules)) {
+              counts.fetchMatched += 1;
+            }
+          }, function () {});
+        } catch (error) {
+          return response;
+        }
+        return response;
+      });
+    };
+  };
+
   api.install = function (scope, config) {
     var original = scope.JSON.parse;
     var rules = config.rules || [];
     var depthLimit = config.depthLimit || 8;
-    var counts = { seen: 0, pruned: 0, fields: {} };
+    var counts = { seen: 0, pruned: 0, fetchMatched: 0, fields: {} };
 
     scope.JSON.parse = function (text) {
       var parsed = original.apply(this, arguments);
@@ -138,6 +173,10 @@
       }
       return parsed;
     };
+
+    if (config.observeFetch) {
+      api.observeFetch(scope, rules, counts);
+    }
 
     return counts;
   };

@@ -56,10 +56,14 @@ public struct PruneRules: Codable, Sendable, Equatable {
 
     public let depthLimit: Int
     public let rules: [Rule]
+    /// Temporary: counts the JSON responses fetched after the first page load,
+    /// without changing them, to establish where a surface's data arrives from.
+    public let observeFetch: Bool?
 
-    public init(depthLimit: Int, rules: [Rule]) {
+    public init(depthLimit: Int, rules: [Rule], observeFetch: Bool? = nil) {
         self.depthLimit = depthLimit
         self.rules = rules
+        self.observeFetch = observeFetch
     }
 }
 

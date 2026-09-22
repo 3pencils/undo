@@ -15,5 +15,7 @@
       "note": "The suggested-reel queue. Opening a reel from a DM seeds an endless queue of reels from accounts you do not follow. Keeping the first edge leaves the reel that was actually sent to you and removes everything behind it, so there is nothing to swipe to.",
       "gate": "clips__discover"
     }
-  ]
+  ],
+  "observeFetch": true,
+  "observeFetchNote": "Temporary. Counts, and does not change, the JSON responses Instagram fetches after the first page load, to establish which route the suggested-reel queue arrives on. Remove once that is known."
 }
