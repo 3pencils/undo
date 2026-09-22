@@ -6,6 +6,10 @@ function enginePath(relativePath) {
   return fileURLToPath(new URL('../engine/' + relativePath, import.meta.url));
 }
 
+/* Values the script returns are built inside the sandbox, so their prototypes
+   are not this realm's. `assert.deepEqual` on an array it returned fails with
+   "same structure but not reference-equal" — wrap it in `Array.from` first. */
+
 /* Runs a shipped script in a sandbox and hands back the namespace it defines.
    The file is read exactly as it ships, so these tests run the same bytes the app
    injects into the page. */
@@ -29,8 +33,11 @@ export function fakeDocument({ path = '/', articles = [] } = {}) {
   const nodes = articles.map((article) => ({
     style: { display: article.display || '' },
     textContent: article.text || '',
-    querySelectorAll: () =>
-      (article.hrefs || []).map((href) => ({ getAttribute: () => href })),
+    // filter.js asks for anchors by one selector and label elements by another.
+    querySelectorAll: (selector) =>
+      selector === 'a[href]'
+        ? (article.hrefs || []).map((href) => ({ getAttribute: () => href }))
+        : (article.labels || []).map((label) => ({ children: [], textContent: label })),
   }));
 
   const head = {

@@ -39,7 +39,10 @@ func engineData(_ relativePath: String) throws -> Data {
     #expect(rules.articleSelector == "article")
     #expect(rules.feedRootSelector == "main")
     #expect(rules.hideIfLinkPrefix.contains("/reel/"))
-    #expect(rules.hideIfTextContains.contains("Sponsored"))
+    // "Ad" is the label Instagram's mobile web actually uses, and it is matched
+    // whole rather than as a substring, so it belongs in this list and not the other.
+    #expect(rules.hideIfExactText.contains("Ad"))
+    #expect(rules.hideIfTextContains.contains("Suggested for you"))
 }
 
 @Test func buildsAOneLineJSONLiteralForInjection() throws {

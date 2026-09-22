@@ -15,17 +15,20 @@ public struct PathRules: Codable, Sendable, Equatable {
 public struct FeedRules: Codable, Sendable, Equatable {
     public let hideIfLinkPrefix: [String]
     public let hideIfTextContains: [String]
+    public let hideIfExactText: [String]
     public let articleSelector: String
     public let feedRootSelector: String
 
     public init(
         hideIfLinkPrefix: [String],
         hideIfTextContains: [String],
+        hideIfExactText: [String],
         articleSelector: String,
         feedRootSelector: String
     ) {
         self.hideIfLinkPrefix = hideIfLinkPrefix
         self.hideIfTextContains = hideIfTextContains
+        self.hideIfExactText = hideIfExactText
         self.articleSelector = articleSelector
         self.feedRootSelector = feedRootSelector
     }

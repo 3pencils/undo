@@ -23,13 +23,13 @@ test('hides a feed item that links to a reel', () => {
   assert.equal(filter.shouldHideArticle(descriptor, config), true);
 });
 
-test('hides suggested and sponsored posts', () => {
+test('hides suggested posts by phrase and adverts by label', () => {
   assert.equal(
     filter.shouldHideArticle({ hrefs: ['/p/XYZ/'], text: 'Suggested for you' }, config),
     true
   );
   assert.equal(
-    filter.shouldHideArticle({ hrefs: ['/p/XYZ/'], text: 'Sponsored' }, config),
+    filter.shouldHideArticle({ hrefs: ['/p/XYZ/'], text: 'x', labels: ['Sponsored'] }, config),
     true
   );
 });
@@ -45,7 +45,7 @@ test('filterFeed hides the right articles and counts them', () => {
     articles: [
       { hrefs: ['/p/AAA/'], text: 'a photo' },
       { hrefs: ['/reel/BBB/'], text: 'a reel' },
-      { hrefs: ['/p/CCC/'], text: 'Sponsored' },
+      { hrefs: ['/p/CCC/'], text: 'a caption', labels: ['brand', 'Ad'] },
     ],
   });
   assert.equal(filter.filterFeed(doc, config), 2);
@@ -102,3 +102,54 @@ test('applyReelLock removes the lock when the page changes', () => {
   assert.equal(filter.applyReelLock(doc), false);
   assert.equal(doc.head.children.length, 0);
 });
+
+test('hides an advert by its label, which Instagram writes as "Ad"', () => {
+  const descriptor = {
+    hrefs: ['/capitalone/', '/p/AAA/'],
+    text: 'capitalone Ad Earn $250 with 360 Checking',
+    labels: ['capitalone', 'Ad', '617'],
+  };
+  assert.equal(filter.shouldHideArticle(descriptor, config), true);
+});
+
+test('does not hide a post merely for containing the letters of a label', () => {
+  // "Ad" is matched whole, so none of these are adverts.
+  const captions = ['Adam at the beach', 'some advice', 'Adidas haul', 'a radio show'];
+  for (const caption of captions) {
+    const descriptor = {
+      hrefs: ['/friend/', '/p/BBB/'],
+      text: caption,
+      labels: ['friend', caption, '42'],
+    };
+    assert.equal(
+      filter.shouldHideArticle(descriptor, config),
+      false,
+      `"${caption}" is not an advert`
+    );
+  }
+});
+
+test('collects short leaf lines as labels and ignores long ones', () => {
+  const article = {
+    labels: ['Ad', 'capitalone'],
+    hrefs: ['/p/AAA/'],
+    text: 'x',
+  };
+  const doc = fakeDocument({ path: '/', articles: [article] });
+  const described = filter.describeArticle(doc.articles[0]);
+  assert.deepEqual(Array.from(described.labels), ['Ad', 'capitalone']);
+});
+
+test('filterFeed hides an advert in a real-shaped feed', () => {
+  const doc = fakeDocument({
+    path: '/',
+    articles: [
+      { hrefs: ['/p/AAA/'], text: 'Adam at the beach', labels: ['friend', 'Adam at the beach'] },
+      { hrefs: ['/p/BBB/'], text: 'capitalone Ad', labels: ['capitalone', 'Ad'] },
+    ],
+  });
+  assert.equal(filter.filterFeed(doc, config), 1);
+  assert.equal(doc.articles[0].style.display, '');
+  assert.equal(doc.articles[1].style.display, 'none');
+});
+

@@ -27,13 +27,30 @@
     return api.normalizePath(path) === '/';
   };
 
+  api.LABEL_MAX_LENGTH = 24;
+
   api.describeArticle = function (element) {
     var anchors = element.querySelectorAll('a[href]');
     var hrefs = [];
     for (var i = 0; i < anchors.length; i += 1) {
       hrefs.push(anchors[i].getAttribute('href') || '');
     }
-    return { hrefs: hrefs, text: element.textContent || '' };
+    /* Instagram labels an advert with the word "Ad" on a line of its own. That
+       is far too short to look for inside an article's whole text, which would
+       hide any post mentioning Adam or advice, so the short leaf lines are
+       collected separately and matched whole. */
+    var labels = [];
+    var candidates = element.querySelectorAll('span, div, a, h1, h2, h3');
+    for (var j = 0; j < candidates.length; j += 1) {
+      if (candidates[j].children.length > 0) {
+        continue;
+      }
+      var label = (candidates[j].textContent || '').trim();
+      if (label && label.length <= api.LABEL_MAX_LENGTH) {
+        labels.push(label);
+      }
+    }
+    return { hrefs: hrefs, text: element.textContent || '', labels: labels };
   };
 
   api.shouldHideArticle = function (descriptor, config) {
@@ -47,6 +64,12 @@
     }
     for (i = 0; i < config.hideIfTextContains.length; i += 1) {
       if (descriptor.text.indexOf(config.hideIfTextContains[i]) !== -1) {
+        return true;
+      }
+    }
+    var labels = descriptor.labels || [];
+    for (i = 0; i < config.hideIfExactText.length; i += 1) {
+      if (labels.indexOf(config.hideIfExactText[i]) !== -1) {
         return true;
       }
     }
