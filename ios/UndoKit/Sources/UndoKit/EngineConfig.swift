@@ -35,6 +35,29 @@ public struct FeedRules: Codable, Sendable, Equatable {
     }
 }
 
+/// The data-layer rules, as shipped in `engine/<platform>/prune.json`.
+public struct PruneRules: Codable, Sendable, Equatable {
+    public struct Rule: Codable, Sendable, Equatable {
+        public let container: String
+        public let emptyArray: String
+
+        public init(container: String, emptyArray: String) {
+            self.container = container
+            self.emptyArray = emptyArray
+        }
+    }
+
+    public let textGate: String
+    public let depthLimit: Int
+    public let rules: [Rule]
+
+    public init(textGate: String, depthLimit: Int, rules: [Rule]) {
+        self.textGate = textGate
+        self.depthLimit = depthLimit
+        self.rules = rules
+    }
+}
+
 /// Turns the bundled engine files into Swift values.
 ///
 /// Decoding is strict on purpose: a missing key throws rather than falling back to
@@ -47,6 +70,10 @@ public enum EngineConfig {
 
     public static func decodeFeedRules(_ data: Data) throws -> FeedRules {
         try JSONDecoder().decode(FeedRules.self, from: data)
+    }
+
+    public static func decodePruneRules(_ data: Data) throws -> PruneRules {
+        try JSONDecoder().decode(PruneRules.self, from: data)
     }
 
     /// The feed rules as compact JSON, ready to assign to a global in an injected script.

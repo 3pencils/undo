@@ -62,6 +62,23 @@ final class WebCoordinator: NSObject {
     private static func loadUserScripts(for platform: Platform) -> [WKUserScript] {
         var scripts: [WKUserScript] = []
 
+        // First, and before any of Instagram's own code runs: the data filter. An
+        // advert emptied out of the payload is never drawn, so nothing downstream
+        // has to find it, hide it, or re-decide it on every mutation.
+        if let data = EngineBundle.data("\(platform.engineDirectory)/prune.json"),
+           let rules = try? EngineConfig.decodePruneRules(data),
+           let config = try? ScriptBuilder.pruneConfigScript(rules: rules),
+           let prune = EngineBundle.string("\(platform.engineDirectory)/prune.js") {
+            scripts.append(
+                WKUserScript(source: config, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+            scripts.append(
+                WKUserScript(source: prune, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+        } else {
+            assertionFailure("engine/\(platform.engineDirectory)/prune.json or prune.js is missing")
+        }
+
         if let marker = EngineBundle.string("marker.js") {
             scripts.append(
                 WKUserScript(source: marker, injectionTime: .atDocumentStart, forMainFrameOnly: true)
@@ -150,7 +167,11 @@ extension WebCoordinator: WKNavigationDelegate {
                     'adLabels=' + adLabels,
                     'dialogs=' + document.querySelectorAll('[role="dialog"]').length,
                     'buttons=[' + texts('button', 6).join('|') + ']',
-                    'headings=[' + texts('h1, h2, header span, header div', 4).join('|') + ']'
+                    'headings=[' + texts('h1, h2, header span, header div', 4).join('|') + ']',
+                    'pruned=' + (window.__undoPruned
+                      ? window.__undoPruned.seen + '/' + window.__undoPruned.emptied : 'ABSENT'),
+                    'fields=[' + (window.__undoPruned
+                      ? Object.keys(window.__undoPruned.fields).join('|') : '') + ']'
                   ].join(' ');
                 })()
                 """

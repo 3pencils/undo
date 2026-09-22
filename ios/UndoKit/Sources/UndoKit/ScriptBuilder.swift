@@ -50,4 +50,12 @@ public enum ScriptBuilder {
         let literal = String(decoding: try encoder.encode(config), as: UTF8.self)
         return "window.UndoConfig = \(literal);"
     }
+
+    /// The data filter's rules, as one assignment to a global.
+    public static func pruneConfigScript(rules: PruneRules) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let literal = String(decoding: try encoder.encode(rules), as: UTF8.self)
+        return "window.UndoPruneConfig = \(literal);"
+    }
 }

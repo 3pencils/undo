@@ -54,6 +54,38 @@ scripts are evaluated directly and never become `<script>` elements, so that lis
 looks identical on a filtered page and a guarded one and would tell you nothing
 either way.
 
+## What the data filter can see
+
+Undo removes adverts before Instagram draws them, by wrapping the page's own
+`JSON.parse` at document start. That is the honest cost of the approach, so here
+it is stated plainly rather than left for you to find:
+
+**Wrapping `JSON.parse` means Undo's code is handed the text of every JSON payload
+the page parses** — not only the ones carrying adverts. On an ordinary feed load
+that includes Instagram's own API responses. One of them is literally named
+`xdt_api__v1__web__accounts__get_encrypted_credentials`.
+
+What Undo does with that text is deliberately almost nothing, and you can read all
+of it in `engine/instagram/prune.js`:
+
+- It tests whether the text contains the substring `injected`. If not, the payload
+  is returned untouched and nothing else happens to it.
+- It runs one regular expression over at most the first 8 KB, which matches field
+  *names* of the form `"xdt_…"` and captures nothing else. Values cannot be
+  extracted by it. The names are counted so a debug build can notice when
+  Instagram renames a field and a filter silently stops working.
+- Only for a payload containing `injected` does it walk the parsed object, and the
+  only change it makes is replacing an array of adverts with an empty array.
+
+It never copies a value, never stores a payload, and there is nowhere for anything
+to go: see the section below. And it never runs at all on a guarded path, because
+the scripts are not installed there.
+
+If you would rather Undo did not hold that position, the filter still works without
+it: remove `prune.json` and `prune.js` from `loadUserScripts` in
+`ios/Undo/WebCoordinator.swift`. You lose the removal of story adverts, and feed
+adverts go back to being hidden after they are drawn rather than never drawn.
+
 ## What Undo sends where
 
 Nothing. Undo has no backend, no analytics, no telemetry and no remote code. It

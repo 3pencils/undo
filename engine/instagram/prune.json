@@ -1,0 +1,11 @@
+{
+  "textGate": "injected",
+  "depthLimit": 8,
+  "rules": [
+    {
+      "container": "xdt_injected_story_units",
+      "emptyArray": "ad_media_items",
+      "note": "Story adverts. Instagram delivers them in their own field, separate from the real stories connection, so emptying it cannot touch a followed account's story."
+    }
+  ]
+}
