@@ -35,3 +35,15 @@ import Testing
     let script = try ScriptBuilder.styleInjector(css: css, id: "undo-static-hides")
     #expect(script.contains("/reels/"))
 }
+
+@Test func theConfigScriptCarriesTheGuardedPathsToThePage() throws {
+    let feedRules = try EngineConfig.decodeFeedRules(engineData("instagram/feed.json"))
+    let rules = try EngineConfig.decodePathRules(engineData("instagram/paths.json"))
+    let script = try ScriptBuilder.configScript(feedRules: feedRules, guardedPrefixes: rules.guarded)
+    #expect(script.hasPrefix("window.UndoConfig = {"))
+    #expect(script.contains("/accounts/"))
+    #expect(script.contains("/challenge/"))
+    #expect(script.contains("\"articleSelector\":\"article\""))
+    #expect(script.contains("\n") == false)
+}
+

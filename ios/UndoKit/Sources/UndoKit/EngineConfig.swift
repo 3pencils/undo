@@ -4,10 +4,14 @@ import Foundation
 public struct PathRules: Codable, Sendable, Equatable {
     public let blocked: [String]
     public let allowed: [String]
+    /// Paths Undo's own scripts stay off. Instagram asks for credentials on more
+    /// than one of them, and the page filter needs the same list the app uses.
+    public let guarded: [String]
 
-    public init(blocked: [String], allowed: [String]) {
+    public init(blocked: [String], allowed: [String], guarded: [String]) {
         self.blocked = blocked
         self.allowed = allowed
+        self.guarded = guarded
     }
 }
 

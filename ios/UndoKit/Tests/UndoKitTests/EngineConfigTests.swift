@@ -23,6 +23,8 @@ func engineData(_ relativePath: String) throws -> Data {
     #expect(rules.blocked.contains("/explore/"))
     #expect(rules.allowed.contains("/reel/"))
     #expect(rules.allowed.contains("/explore/search/"))
+    #expect(rules.guarded.contains("/accounts/"))
+    #expect(rules.guarded.contains("/challenge/"))
 }
 
 @Test func theShippedPathRulesBlockWhatTheySay() throws {

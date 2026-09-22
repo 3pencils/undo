@@ -4,19 +4,31 @@
    are never painted. Matching is by href and aria-label: class names on
    instagram.com are generated and change every few weeks.
 
-   The explore link is deliberately absent. The magnifier in the bottom bar points
-   at /explore/ and is the only way to reach search, so it stays visible and the
-   navigation policy sends it to search instead. */
+   Two deliberate absences:
+
+   The explore link. The magnifier in the bottom bar points at /explore/ and is
+   the only way to reach search, so it stays visible and the navigation policy
+   sends it to search instead.
+
+   A bare /reels/ prefix. Instagram puts an "Original audio" credit at
+   /reels/audio/<id>/ on every video post, so a[href^="/reels/"] reaches inside
+   ordinary posts from accounts you follow. The exact href and the navigation
+   landmarks below are enough for the tab itself. */
 
 /* The Reels entry in the navigation bar. */
 a[href="/reels/"],
-a[href^="/reels/"],
-[aria-label="Reels"] {
+a[href^="/reels/?"],
+[aria-label="Reels"],
+nav a[href^="/reels"],
+[role="navigation"] a[href^="/reels"],
+[role="tablist"] a[href^="/reels"] {
   display: none !important;
 }
 
-/* "Open in app" banners and App Store interstitials. */
+/* "Open in app" prompts and App Store interstitials. */
 a[href^="https://apps.apple.com"],
+a[href^="https://applink.instagram.com/"],
+a[href^="https://itunes.apple.com/app/instagram/"],
 a[href^="itms-apps:"],
 a[href^="instagram:"] {
   display: none !important;

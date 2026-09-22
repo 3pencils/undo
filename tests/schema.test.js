@@ -21,17 +21,26 @@ test('paths.json lists blocked and allowed prefixes', () => {
   const paths = readJSON('instagram/paths.json');
   assert.ok(Array.isArray(paths.blocked) && paths.blocked.length > 0);
   assert.ok(Array.isArray(paths.allowed));
+  assert.ok(Array.isArray(paths.guarded) && paths.guarded.length > 0);
   paths.blocked.forEach((p, i) => assertPathPrefix(p, `blocked[${i}]`));
   paths.allowed.forEach((p, i) => assertPathPrefix(p, `allowed[${i}]`));
+  paths.guarded.forEach((p, i) => assertPathPrefix(p, `guarded[${i}]`));
+  assert.ok(paths.guarded.includes('/accounts/'), 'login lives under /accounts/');
+  assert.ok(paths.guarded.includes('/challenge/'), 'a suspicious-login checkpoint asks for credentials too');
   assert.ok(paths.blocked.includes('/reels/'));
   assert.ok(paths.blocked.includes('/explore/'));
   assert.ok(paths.allowed.includes('/reel/'));
   assert.ok(paths.allowed.includes('/explore/search/'));
 });
 
-test('paths.json leaves the login path alone', () => {
+test('paths.json never blocks a path it also guards', () => {
   const paths = readJSON('instagram/paths.json');
-  assert.ok(!paths.blocked.some((p) => '/accounts/'.startsWith(p)));
+  for (const guarded of paths.guarded) {
+    assert.ok(
+      !paths.blocked.some((b) => guarded.startsWith(b)),
+      `${guarded} must stay reachable: you cannot sign in to a page that will not load`
+    );
+  }
 });
 
 function readStylesheet(relativePath) {
@@ -42,6 +51,10 @@ function readStylesheet(relativePath) {
 test('hide.css hides the reels entry and leaves search alone', () => {
   const rules = readStylesheet('instagram/hide.css');
   assert.ok(rules.includes('a[href="/reels/"]'), 'hides the reels link');
+  assert.ok(
+    !/a\[href\^="\/reels\/"\]/.test(rules),
+    'a bare /reels/ prefix reaches the Original audio credit on every video post'
+  );
   assert.ok(rules.includes('display: none'), 'actually hides something');
   assert.ok(
     !rules.includes('/explore/'),

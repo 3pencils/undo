@@ -1,4 +1,12 @@
 {
   "blocked": ["/reels/", "/explore/"],
-  "allowed": ["/reel/", "/explore/search/"]
+  "allowed": ["/reel/", "/explore/search/"],
+  "guarded": [
+    "/accounts/",
+    "/challenge/",
+    "/two_factor/",
+    "/emailsignup/",
+    "/recover/",
+    "/oauth/"
+  ]
 }

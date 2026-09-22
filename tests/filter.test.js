@@ -55,10 +55,10 @@ test('filterFeed hides the right articles and counts them', () => {
     ],
   });
   assert.equal(filter.filterFeed(doc, config), 2);
-  assert.equal(doc.articles[0].style.display, '', 'a photo stays');
-  assert.equal(doc.articles[1].style.display, '', 'a video from a followed account stays');
-  assert.equal(doc.articles[2].style.display, 'none', 'an advert goes');
-  assert.equal(doc.articles[3].style.display, 'none', 'a suggested post goes');
+  assert.equal(doc.articles[0].style.visibility, '', 'a photo stays');
+  assert.equal(doc.articles[1].style.visibility, '', 'a video from a followed account stays');
+  assert.equal(doc.articles[2].style.visibility, 'hidden', 'an advert goes');
+  assert.equal(doc.articles[3].style.visibility, 'hidden', 'a suggested post goes');
 });
 
 test('filterFeed leaves every other page alone', () => {
@@ -67,16 +67,16 @@ test('filterFeed leaves every other page alone', () => {
     articles: [{ text: 'a reel someone sent' }],
   });
   assert.equal(filter.filterFeed(doc, config), 0);
-  assert.equal(doc.articles[0].style.display, '');
+  assert.equal(doc.articles[0].style.visibility, '');
 });
 
 test('filterFeed shows an article again when a recycled node stops matching', () => {
   const doc = fakeDocument({
     path: '/',
-    articles: [{ text: 'a photo', display: 'none' }],
+    articles: [{ text: 'a photo', hiddenAlready: true }],
   });
   assert.equal(filter.filterFeed(doc, config), 0);
-  assert.equal(doc.articles[0].style.display, '');
+  assert.equal(doc.articles[0].style.visibility, '');
 });
 
 test('singleReelId reads the id out of a reel path', () => {
@@ -171,7 +171,38 @@ test('filterFeed hides an advert in a real-shaped feed', () => {
     ],
   });
   assert.equal(filter.filterFeed(doc, config), 1);
-  assert.equal(doc.articles[0].style.display, '');
-  assert.equal(doc.articles[1].style.display, 'none');
+  assert.equal(doc.articles[0].style.visibility, '');
+  assert.equal(doc.articles[1].style.visibility, 'hidden');
+});
+
+test('treats every guarded path as off limits, however it is spelled', () => {
+  const guarded = { guardedPrefixes: ['/accounts/', '/challenge/', '/two_factor/'] };
+  const offLimits = [
+    '/accounts/login/',
+    '/accounts/login',
+    '/ACCOUNTS/login/',
+    '/challenge/',
+    '/two_factor/',
+  ];
+  for (const path of offLimits) {
+    assert.equal(filter.isGuardedPath(path, guarded), true, `${path} is guarded`);
+  }
+  for (const path of ['/', '/direct/inbox/', '/reel/ABC123/', '/accountancy/']) {
+    assert.equal(filter.isGuardedPath(path, guarded), false, `${path} is not guarded`);
+  }
+});
+
+test('a missing guarded list does not accidentally guard everything', () => {
+  assert.equal(filter.isGuardedPath('/', {}), false);
+  assert.equal(filter.isGuardedPath('/', undefined), false);
+});
+
+test('releaseReelLock removes the lock whatever the path', () => {
+  const doc = fakeDocument({ path: '/reel/ABC123/' });
+  filter.applyReelLock(doc);
+  assert.equal(doc.head.children.length, 1);
+  doc.location.pathname = '/accounts/login/';
+  filter.releaseReelLock(doc);
+  assert.equal(doc.head.children.length, 0);
 });
 

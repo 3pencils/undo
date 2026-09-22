@@ -27,6 +27,21 @@
     return api.normalizePath(path) === '/';
   };
 
+  /* The app withholds these scripts from a page load under a guarded path, but
+     Instagram can route into one without loading a page, and on that hop the
+     navigation delegate never runs. So the filter carries the same list and does
+     nothing at all on a guarded path: it reads no node and touches no input. */
+  api.isGuardedPath = function (path, config) {
+    var prefixes = (config && config.guardedPrefixes) || [];
+    var candidate = api.normalizePath(path).toLowerCase();
+    for (var i = 0; i < prefixes.length; i += 1) {
+      if (candidate.indexOf(prefixes[i]) === 0) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   api.LABEL_MAX_LENGTH = 24;
 
   /* How many text nodes to read from the top of a post. Instagram puts the
@@ -79,6 +94,23 @@
     return false;
   };
 
+  /* A hidden post keeps a one-pixel box rather than being removed from layout.
+     Instagram decides when to load more posts with an IntersectionObserver, and a
+     post with no box is never intersected, so display:none stops the feed from
+     ever loading again. Both major filter lists avoid display:none on Instagram
+     for this reason. */
+  api.conceal = function (element) {
+    element.style.visibility = 'hidden';
+    element.style.height = '1px';
+    element.style.overflow = 'hidden';
+  };
+
+  api.reveal = function (element) {
+    element.style.visibility = '';
+    element.style.height = '';
+    element.style.overflow = '';
+  };
+
   /* Every pass re-decides every article, because Instagram recycles feed nodes as
      you scroll and a node hidden once has to be able to come back. */
   api.filterFeed = function (doc, config) {
@@ -94,10 +126,10 @@
     for (var i = 0; i < articles.length; i += 1) {
       var article = articles[i];
       if (api.shouldHideArticle(api.describeArticle(article), config)) {
-        article.style.display = 'none';
+        api.conceal(article);
         hidden += 1;
-      } else if (article.style.display === 'none') {
-        article.style.display = '';
+      } else if (article.style.visibility === 'hidden') {
+        api.reveal(article);
       }
     }
     return hidden;
@@ -107,12 +139,17 @@
 
   /* On a single reel page, the one reel in the URL plays and the page stops
      scrolling, so there is no next one. Every other page keeps its scrolling. */
+  api.releaseReelLock = function (doc) {
+    var existing = doc.getElementById(api.LOCK_ID);
+    if (existing) {
+      existing.remove();
+    }
+  };
+
   api.applyReelLock = function (doc) {
     var existing = doc.getElementById(api.LOCK_ID);
     if (!api.singleReelId(doc.location.pathname)) {
-      if (existing) {
-        existing.remove();
-      }
+      api.releaseReelLock(doc);
       return false;
     }
     if (existing) {
@@ -137,6 +174,10 @@
 
     function run() {
       timer = null;
+      if (api.isGuardedPath(doc.location.pathname, config)) {
+        api.releaseReelLock(doc);
+        return;
+      }
       api.filterFeed(doc, config);
       api.applyReelLock(doc);
     }

@@ -50,7 +50,9 @@ export function fakeDocument({ path = '/', articles = [] } = {}) {
   const ownerDocument = { createTreeWalker: (root) => walkerOver(root.lines) };
 
   const nodes = articles.map((article) => ({
-    style: { display: article.display || '' },
+    style: article.hiddenAlready
+      ? { visibility: 'hidden', height: '1px', overflow: 'hidden' }
+      : { visibility: '', height: '', overflow: '' },
     lines: (article.labels || []).concat(article.text ? [article.text] : []),
     ownerDocument,
     querySelectorAll: () =>

@@ -12,6 +12,7 @@ final class WebCoordinator: NSObject {
     let platform: Platform
 
     private let pathPolicy: PathPolicy
+    private let injectionPolicy: InjectionPolicy
     private let userScripts: [WKUserScript]
 
     #if DEBUG
@@ -26,7 +27,9 @@ final class WebCoordinator: NSObject {
 
     init(platform: Platform) {
         self.platform = platform
-        self.pathPolicy = Self.loadPathPolicy(for: platform)
+        let rules = Self.loadPathRules(for: platform)
+        self.pathPolicy = PathPolicy(rules: rules)
+        self.injectionPolicy = InjectionPolicy(rules: rules)
         self.userScripts = Self.loadUserScripts(for: platform)
         super.init()
     }
@@ -43,16 +46,17 @@ final class WebCoordinator: NSObject {
         webView.load(URLRequest(url: platform.homeURL))
     }
 
-    private static func loadPathPolicy(for platform: Platform) -> PathPolicy {
+    private static func loadPathRules(for platform: Platform) -> PathRules {
         guard let data = EngineBundle.data("\(platform.engineDirectory)/paths.json"),
               let rules = try? EngineConfig.decodePathRules(data)
         else {
-            // A debug build stops here. A release build still browses, because an
-            // app that blocks nothing beats an app that blocks everything.
+            // A debug build stops here. A release build blocks nothing but guards
+            // everything: an app that filters nothing beats one that leaks a script
+            // onto a login page.
             assertionFailure("engine/\(platform.engineDirectory)/paths.json is missing or malformed")
-            return PathPolicy(blocked: [], allowed: [])
+            return PathRules(blocked: [], allowed: [], guarded: ["/"])
         }
-        return PathPolicy(rules: rules)
+        return rules
     }
 
     private static func loadUserScripts(for platform: Platform) -> [WKUserScript] {
@@ -74,16 +78,16 @@ final class WebCoordinator: NSObject {
             assertionFailure("engine/\(platform.engineDirectory)/hide.css is missing")
         }
 
-        // The filter's selectors and phrases, handed over as a global. Round-tripping
-        // through FeedRules means only known keys reach the page.
+        // The filter's selectors, phrases and the guarded paths, handed over as a
+        // global. Round-tripping through FeedRules means only known keys reach the page.
         if let data = EngineBundle.data("\(platform.engineDirectory)/feed.json"),
-           let literal = try? EngineConfig.feedRulesJSONLiteral(data) {
+           let feedRules = try? EngineConfig.decodeFeedRules(data),
+           let source = try? ScriptBuilder.configScript(
+               feedRules: feedRules,
+               guardedPrefixes: Self.loadPathRules(for: platform).guarded
+           ) {
             scripts.append(
-                WKUserScript(
-                    source: "window.UndoConfig = \(literal);",
-                    injectionTime: .atDocumentStart,
-                    forMainFrameOnly: true
-                )
+                WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
             )
         } else {
             assertionFailure("engine/\(platform.engineDirectory)/feed.json is missing or malformed")
@@ -104,7 +108,7 @@ final class WebCoordinator: NSObject {
     private func applyInjectionGuard(for url: URL, on webView: WKWebView) {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
-        guard InjectionPolicy.allowsInjection(url: url) else { return }
+        guard injectionPolicy.allowsInjection(url: url) else { return }
         userScripts.forEach(controller.addUserScript)
     }
 }
@@ -180,7 +184,7 @@ extension WebCoordinator: WKNavigationDelegate {
 
         #if DEBUG
         Self.navigationLog.notice(
-            "navigate \(String(describing: navigationAction.navigationType.rawValue), privacy: .public) -> \(url.absoluteString, privacy: .public) [blocked=\(self.pathPolicy.isBlocked(url.path), privacy: .public) inject=\(InjectionPolicy.allowsInjection(url: url), privacy: .public)]"
+            "navigate \(String(describing: navigationAction.navigationType.rawValue), privacy: .public) -> \(url.absoluteString, privacy: .public) [blocked=\(self.pathPolicy.isBlocked(url.path), privacy: .public) inject=\(self.injectionPolicy.allowsInjection(url: url), privacy: .public)]"
         )
         #endif
 

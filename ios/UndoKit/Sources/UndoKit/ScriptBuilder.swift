@@ -23,4 +23,31 @@ public enum ScriptBuilder {
         })();
         """
     }
+
+    /// The page's configuration, as one assignment to a global.
+    ///
+    /// The guarded prefixes travel with it because the app cannot withhold a script
+    /// from a page it never loads: Instagram routes into `/accounts/` without a page
+    /// load, and on that hop the navigation delegate never runs. The filter checks
+    /// the same list itself and does nothing on a guarded path.
+    public static func configScript(feedRules: FeedRules, guardedPrefixes: [String]) throws -> String {
+        struct PageConfig: Encodable {
+            let hideIfTextContains: [String]
+            let hideIfExactText: [String]
+            let articleSelector: String
+            let feedRootSelector: String
+            let guardedPrefixes: [String]
+        }
+        let config = PageConfig(
+            hideIfTextContains: feedRules.hideIfTextContains,
+            hideIfExactText: feedRules.hideIfExactText,
+            articleSelector: feedRules.articleSelector,
+            feedRootSelector: feedRules.feedRootSelector,
+            guardedPrefixes: guardedPrefixes
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let literal = String(decoding: try encoder.encode(config), as: UTF8.self)
+        return "window.UndoConfig = \(literal);"
+    }
 }
