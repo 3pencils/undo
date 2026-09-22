@@ -1,11 +1,19 @@
 {
-  "textGate": "injected",
   "depthLimit": 8,
   "rules": [
     {
       "container": "xdt_injected_story_units",
-      "emptyArray": "ad_media_items",
-      "note": "Story adverts. Instagram delivers them in their own field, separate from the real stories connection, so emptying it cannot touch a followed account's story."
+      "array": "ad_media_items",
+      "keep": 0,
+      "note": "Story adverts. Instagram delivers them in their own field, beside the real stories connection rather than inside it, so emptying this cannot touch a story from an account you follow.",
+      "gate": "injected"
+    },
+    {
+      "container": "xdt_api__v1__clips__discover__connection_v2",
+      "array": "edges",
+      "keep": 1,
+      "note": "The suggested-reel queue. Opening a reel from a DM seeds an endless queue of reels from accounts you do not follow. Keeping the first edge leaves the reel that was actually sent to you and removes everything behind it, so there is nothing to swipe to.",
+      "gate": "clips__discover"
     }
   ]
 }

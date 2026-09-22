@@ -68,14 +68,17 @@ that includes Instagram's own API responses. One of them is literally named
 What Undo does with that text is deliberately almost nothing, and you can read all
 of it in `engine/instagram/prune.js`:
 
-- It tests whether the text contains the substring `injected`. If not, the payload
-  is returned untouched and nothing else happens to it.
+- It tests the text for the short substring each filter rule declares — today
+  `injected` and `clips__discover`. If none is present the payload is returned
+  untouched and nothing else is ever done with it. That is every payload except the
+  two kinds that carry adverts and the suggested-reel queue.
 - It runs one regular expression over at most the first 8 KB, which matches field
   *names* of the form `"xdt_…"` and captures nothing else. Values cannot be
   extracted by it. The names are counted so a debug build can notice when
   Instagram renames a field and a filter silently stops working.
-- Only for a payload containing `injected` does it walk the parsed object, and the
-  only change it makes is replacing an array of adverts with an empty array.
+- Only a payload that passed that test is walked, and the only change it makes is
+  shortening one array: to nothing for adverts, and to its first item for the reel
+  queue, which leaves the reel someone sent you and drops the queue behind it.
 
 It never copies a value, never stores a payload, and there is nowhere for anything
 to go: see the section below. And it never runs at all on a guarded path, because

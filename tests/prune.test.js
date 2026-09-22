@@ -43,33 +43,33 @@ function realStories(payload) {
 
 test('empties the injected advert array wherever it is nested', () => {
   const payload = storyPayload();
-  const emptied = prune.emptyInjectedArrays(payload, config.rules, config.depthLimit);
+  const emptied = prune.pruneArrays(payload, config.rules, config.depthLimit);
   assert.equal(emptied, 1);
   assert.deepEqual(Array.from(injectedUnits(payload).ad_media_items), []);
 });
 
 test('leaves the real stories connection completely alone', () => {
   const payload = storyPayload();
-  prune.emptyInjectedArrays(payload, config.rules, config.depthLimit);
+  prune.pruneArrays(payload, config.rules, config.depthLimit);
   assert.equal(realStories(payload).edges.length, 2);
   assert.equal(realStories(payload).edges[0].node.id, 'real-story-1');
 });
 
 test('keeps the container, so a missing field is not a missing object', () => {
   const payload = storyPayload();
-  prune.emptyInjectedArrays(payload, config.rules, config.depthLimit);
+  prune.pruneArrays(payload, config.rules, config.depthLimit);
   assert.equal(typeof injectedUnits(payload), 'object');
   assert.ok(Array.isArray(injectedUnits(payload).ad_media_items));
 });
 
-test('reports nothing emptied when there is nothing to empty', () => {
+test('reports nothing pruned when there is nothing to prune', () => {
   const payload = { data: { xdt_injected_story_units: { ad_media_items: [] } } };
-  assert.equal(prune.emptyInjectedArrays(payload, config.rules, config.depthLimit), 0);
+  assert.equal(prune.pruneArrays(payload, config.rules, config.depthLimit), 0);
 });
 
 test('finds the field by name, not by the path it arrived on', () => {
   const moved = { a: { b: { c: { xdt_injected_story_units: { ad_media_items: [{ x: 1 }] } } } } };
-  assert.equal(prune.emptyInjectedArrays(moved, config.rules, config.depthLimit), 1);
+  assert.equal(prune.pruneArrays(moved, config.rules, config.depthLimit), 1);
   assert.deepEqual(Array.from(moved.a.b.c.xdt_injected_story_units.ad_media_items), []);
 });
 
@@ -78,20 +78,29 @@ test('stops at the depth limit rather than walking a huge payload forever', () =
   for (let i = 0; i < 40; i += 1) {
     deep = { nest: deep };
   }
-  assert.equal(prune.emptyInjectedArrays(deep, config.rules, config.depthLimit), 0);
+  assert.equal(prune.pruneArrays(deep, config.rules, config.depthLimit), 0);
 });
 
 test('survives the shapes a real page throws at JSON.parse', () => {
   for (const value of [null, 42, 'a string', [], {}, [null, [undefined]], { a: null }]) {
-    assert.equal(prune.emptyInjectedArrays(value, config.rules, config.depthLimit), 0);
+    assert.equal(prune.pruneArrays(value, config.rules, config.depthLimit), 0);
   }
 });
 
-test('only walks a payload that could carry an injected advert', () => {
-  assert.equal(prune.isWorthWalking('{"xdt_injected_story_units":{}}', config.textGate), true);
-  assert.equal(prune.isWorthWalking('{"comments":[]}', config.textGate), false);
-  assert.equal(prune.isWorthWalking(undefined, config.textGate), false);
-  assert.equal(prune.isWorthWalking(null, config.textGate), false);
+test('only walks a payload that one of the rules could match', () => {
+  assert.equal(prune.isWorthWalking('{"xdt_injected_story_units":{}}', config.rules), true);
+  assert.equal(
+    prune.isWorthWalking('{"xdt_api__v1__clips__discover__connection_v2":{}}', config.rules),
+    true
+  );
+  // Everything else is returned untouched and never looked at again.
+  assert.equal(prune.isWorthWalking('{"comments":[{"text":"hello"}]}', config.rules), false);
+  assert.equal(
+    prune.isWorthWalking('{"xdt_api__v1__web__accounts__get_encrypted_credentials":{}}', config.rules),
+    false
+  );
+  assert.equal(prune.isWorthWalking(undefined, config.rules), false);
+  assert.equal(prune.isWorthWalking(null, config.rules), false);
 });
 
 test('install returns every parsed value unchanged in shape and counts its work', () => {
@@ -106,7 +115,7 @@ test('install returns every parsed value unchanged in shape and counts its work'
   assert.deepEqual(Array.from(injectedUnits(filtered).ad_media_items), []);
   assert.equal(realStories(filtered).edges.length, 2);
   assert.equal(counts.seen, 1);
-  assert.equal(counts.emptied, 1);
+  assert.equal(counts.pruned, 1);
 });
 
 test('install keeps JSON.parse throwing on invalid JSON, as callers expect', () => {
@@ -118,7 +127,7 @@ test('install keeps JSON.parse throwing on invalid JSON, as callers expect', () 
 test('install never lets its own failure break the page', () => {
   const scope = { JSON: { parse: JSON.parse } };
   // A rule shaped wrongly must not turn every parse on the page into a throw.
-  prune.install(scope, { textGate: 'injected', depthLimit: 8, rules: [null] });
+  prune.install(scope, { depthLimit: 8, rules: [null] });
   const value = scope.JSON.parse('{"xdt_injected_story_units":{"ad_media_items":[{"x":1}]}}');
   assert.equal(typeof value, 'object');
 });
@@ -152,7 +161,33 @@ test('install tallies field names even when there is nothing to prune', () => {
   const scope = { JSON: { parse: JSON.parse } };
   const counts = prune.install(scope, config);
   scope.JSON.parse('{"data":{"xdt_api__v1__feed__timeline__connection":{"edges":[]}}}');
-  assert.equal(counts.emptied, 0);
+  assert.equal(counts.pruned, 0);
   assert.ok(Object.keys(counts.fields).includes('xdt_api__v1__feed__timeline__connection'));
+});
+
+test('keeps the reel that was sent and drops the queue behind it', () => {
+  const payload = {
+    data: {
+      xdt_api__v1__clips__discover__connection_v2: {
+        edges: [
+          { node: { media: { code: 'the-one-sent-to-me' } } },
+          { node: { media: { code: 'suggested-1' } } },
+          { node: { media: { code: 'suggested-2' } } },
+          { node: { media: { code: 'suggested-3' } } },
+        ],
+      },
+    },
+  };
+  assert.equal(prune.pruneArrays(payload, config.rules, config.depthLimit), 1);
+  const edges = payload.data.xdt_api__v1__clips__discover__connection_v2.edges;
+  assert.equal(edges.length, 1, 'nothing left to swipe to');
+  assert.equal(edges[0].node.media.code, 'the-one-sent-to-me', 'and it is the right one');
+});
+
+test('a queue already at its limit is left alone', () => {
+  const payload = {
+    data: { xdt_api__v1__clips__discover__connection_v2: { edges: [{ node: { id: 'only' } }] } },
+  };
+  assert.equal(prune.pruneArrays(payload, config.rules, config.depthLimit), 0);
 });
 

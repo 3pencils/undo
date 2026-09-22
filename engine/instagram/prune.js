@@ -19,7 +19,12 @@
 
   /* Fields are found by key name at any depth, never by a fixed path. Meta rotates
      the envelope around these fields while the field itself stays put, so a path
-     match is a rule with an expiry date. */
+     match is a rule with an expiry date.
+​
+     A rule truncates an array to its first `keep` items. `keep: 0` empties it,
+     which is what an advert field wants. `keep: 1` leaves the item that was asked
+     for and drops the queue behind it, which is what a reel shared in a DM wants:
+     it plays, and there is nothing to swipe to. */
   api.FIELD_TALLY_LIMIT = 40;
 
   /* How much of a payload to read when tallying field names. A connection name
@@ -51,8 +56,8 @@
     }
   };
 
-  api.emptyInjectedArrays = function (value, rules, depthLimit) {
-    var emptied = 0;
+  api.pruneArrays = function (value, rules, depthLimit) {
+    var pruned = 0;
 
     function walk(node, depth) {
       if (depth > depthLimit || node === null || typeof node !== 'object') {
@@ -73,9 +78,11 @@
         if (container === null || typeof container !== 'object') {
           continue;
         }
-        if (Array.isArray(container[rule.emptyArray]) && container[rule.emptyArray].length > 0) {
-          container[rule.emptyArray] = [];
-          emptied += 1;
+        var keep = rule.keep || 0;
+        var array = container[rule.array];
+        if (Array.isArray(array) && array.length > keep) {
+          container[rule.array] = array.slice(0, keep);
+          pruned += 1;
         }
       }
       var keys = Object.keys(node);
@@ -85,22 +92,35 @@
     }
 
     walk(value, 0);
-    return emptied;
+    return pruned;
   };
 
-  /* A payload that cannot contain an injected advert is not worth walking. Gating
-     on a substring keeps every other parse in the page to one indexOf, and gating
-     on the substring rather than the whole field name survives a rename. */
-  api.isWorthWalking = function (text, gate) {
-    return typeof text === 'string' && text.indexOf(gate) !== -1;
+  /* A payload that cannot match any rule is never walked, and never looked at
+     beyond this test. Each rule declares the substring worth looking for, which
+     keeps every other parse in the page to a handful of indexOf calls, and keeps
+     the set of payloads this file inspects as small as the rules require.
+
+     The gate is a substring rather than a whole field name on purpose: Meta
+     renames the envelope around a field more often than the field, so
+     "clips__discover" survives a rename that "xdt_api__v1__clips__discover…"
+     would not. */
+  api.isWorthWalking = function (text, rules) {
+    if (typeof text !== 'string') {
+      return false;
+    }
+    for (var i = 0; i < rules.length; i += 1) {
+      if (rules[i] && text.indexOf(rules[i].gate) !== -1) {
+        return true;
+      }
+    }
+    return false;
   };
 
   api.install = function (scope, config) {
     var original = scope.JSON.parse;
     var rules = config.rules || [];
-    var gate = config.textGate;
     var depthLimit = config.depthLimit || 8;
-    var counts = { seen: 0, emptied: 0, fields: {} };
+    var counts = { seen: 0, pruned: 0, fields: {} };
 
     scope.JSON.parse = function (text) {
       var parsed = original.apply(this, arguments);
@@ -108,11 +128,11 @@
          every failure here leaves the parsed value exactly as it arrived. */
       try {
         api.tallyFields(text, counts.fields);
-        if (!api.isWorthWalking(text, gate)) {
+        if (!api.isWorthWalking(text, rules)) {
           return parsed;
         }
         counts.seen += 1;
-        counts.emptied += api.emptyInjectedArrays(parsed, rules, depthLimit);
+        counts.pruned += api.pruneArrays(parsed, rules, depthLimit);
       } catch (error) {
         return parsed;
       }

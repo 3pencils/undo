@@ -39,20 +39,25 @@ public struct FeedRules: Codable, Sendable, Equatable {
 public struct PruneRules: Codable, Sendable, Equatable {
     public struct Rule: Codable, Sendable, Equatable {
         public let container: String
-        public let emptyArray: String
+        public let array: String
+        /// The substring that makes a payload worth walking at all.
+        public let gate: String
+        /// How many items survive. Zero empties the array; one leaves the item
+        /// that was asked for and drops the queue behind it.
+        public let keep: Int
 
-        public init(container: String, emptyArray: String) {
+        public init(container: String, array: String, gate: String, keep: Int) {
             self.container = container
-            self.emptyArray = emptyArray
+            self.array = array
+            self.gate = gate
+            self.keep = keep
         }
     }
 
-    public let textGate: String
     public let depthLimit: Int
     public let rules: [Rule]
 
-    public init(textGate: String, depthLimit: Int, rules: [Rule]) {
-        self.textGate = textGate
+    public init(depthLimit: Int, rules: [Rule]) {
         self.depthLimit = depthLimit
         self.rules = rules
     }
