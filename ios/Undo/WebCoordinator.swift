@@ -21,6 +21,7 @@ final class WebCoordinator: NSObject {
     /// writes to the local system log only: nothing leaves the device.
     private static let navigationLog = Logger(subsystem: "com.3pencils.undo", category: "navigation")
     private var urlObservation: NSKeyValueObservation?
+    private var probe: Task<Void, Never>?
     #endif
 
     init(platform: Platform) {
@@ -110,33 +111,47 @@ final class WebCoordinator: NSObject {
 
 extension WebCoordinator: WKNavigationDelegate {
     #if DEBUG
-    /// Reports what the filter did, so a feed that looks empty can be told apart
-    /// from a feed the filter emptied.
+    /// Reports what is on screen every few seconds, so a screen Undo does not yet
+    /// recognise can be identified without a screenshot. Debug builds only.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor in
-            for _ in 0..<6 {
+        guard probe == nil else { return }
+        probe = Task { @MainActor [weak webView] in
+            while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3))
+                guard let webView else { return }
                 let script = """
                 (function () {
-                  var articles = document.querySelectorAll('main article');
-                  var hidden = 0, reasons = [];
-                  for (var i = 0; i < articles.length; i += 1) {
-                    if (articles[i].style.display === 'none') {
-                      hidden += 1;
-                      var d = window.UndoInstagram
-                        ? window.UndoInstagram.describeArticle(articles[i]) : null;
-                      if (d && reasons.length < 3) {
-                        reasons.push(d.hrefs.slice(0, 4).join(' ') + ' | ' + d.labels.slice(0, 4).join(','));
-                      }
+                  function texts(selector, limit) {
+                    var out = [], nodes = document.querySelectorAll(selector);
+                    for (var i = 0; i < nodes.length && out.length < limit; i += 1) {
+                      var t = (nodes[i].textContent || '').trim();
+                      if (t && t.length < 30) out.push(t);
                     }
+                    return out;
                   }
-                  return 'articles=' + articles.length + ' hidden=' + hidden +
-                         ' spinner=' + !!document.querySelector('main [role="progressbar"], main svg[aria-label*="Loading"]') +
-                         (reasons.length ? ' :: ' + reasons.join(' // ') : '');
+                  var articles = document.querySelectorAll('main article');
+                  var hidden = 0;
+                  for (var i = 0; i < articles.length; i += 1) {
+                    if (articles[i].style.display === 'none') hidden += 1;
+                  }
+                  var adLabels = 0, all = document.querySelectorAll('span, div');
+                  for (var j = 0; j < all.length; j += 1) {
+                    if (all[j].children.length === 0 && (all[j].textContent || '').trim() === 'Ad') adLabels += 1;
+                  }
+                  return [
+                    'path=' + location.pathname + location.search,
+                    'articles=' + articles.length,
+                    'hidden=' + hidden,
+                    'videos=' + document.querySelectorAll('video').length,
+                    'adLabels=' + adLabels,
+                    'dialogs=' + document.querySelectorAll('[role="dialog"]').length,
+                    'buttons=[' + texts('button', 6).join('|') + ']',
+                    'headings=[' + texts('h1, h2, header span, header div', 4).join('|') + ']'
+                  ].join(' ');
                 })()
                 """
                 if let value = try? await webView.evaluateJavaScript(script) {
-                    Self.navigationLog.notice("filter \(String(describing: value), privacy: .public)")
+                    Self.navigationLog.notice("screen \(String(describing: value), privacy: .public)")
                 }
             }
         }
